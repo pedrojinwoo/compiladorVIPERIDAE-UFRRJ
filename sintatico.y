@@ -39,13 +39,16 @@ attributes litCodeGenerator(string type, string value);
 attributes IDVerifier(string name);
 attributes castCodeGenerator(string tType, attributes right);
 attributes logicRelCodeGenerator(string op, attributes left, attributes right);
+attributes stringOrchestrator(string op, attributes left, attributes right);
+// attributes stringOrchestrator(string op, attributes iterable, int factor);
+attributes stringAssignment(attributes left, attributes right);
 %}
 
-%token TK_SEMICOLON
-%token TK_ID TK_NUM_INT TK_NUM_FLOAT TK_CHAR TK_BOOL
+%token TK_SEMICOLON\
+%token TK_ID TK_NUM_INT TK_NUM_FLOAT TK_CHAR TK_BOOL TK_STRING
 %token TK_LPAREN TK_RPAREN
 %token TK_ASSIGN TK_EQ TK_NEQ TK_LT TK_GT TK_LEQ TK_GEQ
-%token TK_TYPE_INT TK_TYPE_FLOAT TK_TYPE_CHAR TK_TYPE_BOOL
+%token TK_TYPE_INT TK_TYPE_FLOAT TK_TYPE_CHAR TK_TYPE_BOOL TK_TYPE_STRING
 %token TK_AND TK_OR TK_NOT
 %nonassoc CAST_PREC
 
@@ -125,6 +128,11 @@ DECLARATION			: TK_TYPE_INT TK_ID TK_SEMICOLON
 									varDeclaration($2.label, "bool");
 									$$.traducao = "";
 								}
+								| TK_TYPE_STRING TK_ID TK_SEMICOLON
+								{
+									varDeclaration($2.label, "string");
+									$$.traducao = "";
+								}
 								;
 
 ASSIGNMENT			: TK_ID TK_ASSIGN E TK_SEMICOLON
@@ -135,7 +143,12 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E TK_SEMICOLON
 									} else {
 										if($3.type != "error") {
 											if(symbol_table[$1.label].type == $3.type) {
-												$$.traducao = $3.traducao + "\t" + symbol_table[$1.label].alias + " = " + $3.label + ";\n";
+												if($3.type == "string") {
+													attributes temp = stringOrchestrator("=", $1, $3);
+													$$.traducao = $3.traducao + temp.traducao;
+												} else {
+													$$.traducao = $3.traducao + "\t" + symbol_table[$1.label].alias + " = " + $3.label + ";\n";
+												}
 											} else {
 												yyerror("Erro Semantico: Tipos incompativeis! '" + $1.label + "' e " + symbol_table[$1.label].type + " mas recebeu " + $3.type);
 												$$.traducao = $3.traducao;
@@ -184,6 +197,10 @@ E								: E '+' E
 								| TK_BOOL
 								{
 									$$ = litCodeGenerator("bool", $1.label);
+								}
+								| TK_STRING
+								{
+									$$ = litCodeGenerator("string", $1.label);
 								}
 								| TK_ID
 								{
@@ -273,6 +290,8 @@ void varDeclaration(string name, string type)
 		string aliasType;
 		if(type == "bool") {
 			aliasType = "int";
+		} else if(type == "string") {
+			aliasType = "char*";
 		} else {
 			aliasType = type;
 		}
@@ -336,14 +355,26 @@ attributes litCodeGenerator(string type, string value)
 {
 	attributes r;
 	string aliasType;
+	bool isString = false;
 	if(type == "bool") {
 		aliasType = "int";
+	} else if(type == "string") {
+		aliasType = "char*";
+		isString = true;
 	} else {
 		aliasType = type;
 	}
 	r.label = genAlias(aliasType);
 	r.type = type;
-	r.traducao = "\t" + r.label + " = " + value + ";\n";
+	r.value = value;
+	if(isString) {
+		string attValue = get<string>(r.value);
+		r.traducao = 
+			"\t" + r.label + " = (char*)malloc(" + to_string(attValue.size() + 1) + ");\n" +
+			"\tstrcpy(" + r.label + ", \"" + value + "\");\n";
+	} else {
+		r.traducao = "\t" + r.label + " = " + value + ";\n";
+	}
 	return r;
 }
 attributes IDVerifier(string name)
@@ -390,6 +421,8 @@ attributes castCodeGenerator(string tType, attributes right)
 	string aliasType;
 		if(tType == "bool") {
 			aliasType = "int";
+		} else if(tType == "string") {
+			aliasType = "char*";
 		} else {
 			aliasType = tType;
 		}
@@ -398,7 +431,8 @@ attributes castCodeGenerator(string tType, attributes right)
     r.traducao = right.traducao + "\t" + r.label + " = (" + tType + ") " + right.label + ";\n";
     return r;
 }
-attributes logicRelCodeGenerator(string op, attributes left, attributes right) {
+attributes logicRelCodeGenerator(string op, attributes left, attributes right)
+{
 	attributes r;
 	if(left.type == "error" || right.type == "error") {
 		r.label = "";
@@ -442,6 +476,36 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right) {
     r.traducao = left.traducao + right.traducao + extraTrad + 
                  "\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n";
     return r;
+}
+attributes stringOrchestrator(string op, attributes left, attributes right)
+{
+	if(op == "=") {
+		return stringAssignment(left, right);
+	}
+	return attributes();
+}
+/*attributes stringOrchestrator(string op, attributes iterable, int factor)
+{
+	return attributes();
+}*/
+attributes stringAssignment(attributes left, attributes right)
+{
+	attributes r;
+	symbol &sym = symbol_table[left.label];
+	r.label = sym.alias;
+	r.type = "string";
+	r.value = right.value;
+	string tradFree = "";
+	if(holds_alternative<string>(sym.value) && !get<string>(sym.value).empty()) {
+		tradFree = "\tfree(" + sym.alias + ");\n";
+	}
+	sym.value = right.value;
+	r.traducao =
+		right.traducao +
+		tradFree +
+		"\t" + sym.alias + " = (char*)malloc(" + to_string(get<string>(right.value).size() + 1) + ");\n" +
+		"\tstrcpy(" + sym.alias + ", \"" + get<string>(right.value) + "\");\n";
+	return r;
 }
 
 int main(int argc, char* argv[])
