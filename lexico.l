@@ -27,6 +27,8 @@ STRING              \"{STRCONTENT}\"
 
 "("                 { return TK_LPAREN; }
 ")"                 { return TK_RPAREN; }
+"{"                 { return TK_LBRACE; }
+"}"                 { return TK_RBRACE; }
 
 "="                 { return TK_ASSIGN; }
 "=="                { return TK_EQ; }

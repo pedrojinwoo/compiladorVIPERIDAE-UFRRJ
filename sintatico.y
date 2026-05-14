@@ -24,13 +24,31 @@ struct symbol
 	variant<monostate, int, float, char, bool, string> value;
 };
 
-// Variáveis, Mapas e funções/calls globais
+// CLASSE PARA ESCOPO
+class Scope
+{
+	public:
+		map<string, symbol> table;
+		Scope*parent;
+		Scope(Scope*p) : parent(p) {}
+		symbol*lookup(string name) {
+			if(table.count(name)) {
+				return &table[name];
+			}
+			if(parent!=nullptr) {
+				return parent->lookup(name);
+			}
+			return nullptr;
+		}
+};
+
+// VARIÁVEIS, MAPAS E FUNÇÕES/CALLS GLOBAIS
 int var_temp_qnt;
 int linha = 1;
 bool generalError = false;
 string codigo_gerado;
-map<string, symbol> symbol_table;
 map<string, string> alias_types;
+Scope*current_scope = new Scope(nullptr);
 int yylex(void);
 void yyerror(string);
 
@@ -47,11 +65,13 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes stringOrchestrator(string op, attributes left, attributes right);
 // attributes stringOrchestrator(string op, attributes iterable, int factor);
 attributes stringAssignment(attributes left, attributes right);
+void pushScope();
+void popScope();
 %}
 
 %token TK_SEMICOLON
 %token TK_ID TK_NUM_INT TK_NUM_FLOAT TK_CHAR TK_BOOL TK_STRING
-%token TK_LPAREN TK_RPAREN
+%token TK_LPAREN TK_RPAREN TK_LBRACE TK_RBRACE
 %token TK_ASSIGN TK_EQ TK_NEQ TK_LT TK_GT TK_LEQ TK_GEQ
 %token TK_TYPE_INT TK_TYPE_FLOAT TK_TYPE_CHAR TK_TYPE_BOOL TK_TYPE_STRING
 %token TK_AND TK_OR TK_NOT
@@ -116,6 +136,10 @@ CMD							: DECLARATION
 								{
 									$$.traducao = $1.traducao;
 								}
+								| TK_LBRACE {pushScope();} CMDS TK_RBRACE {popScope();}
+								{
+									$$.traducao = $3.traducao;
+								}
 								;
 
 DECLARATION			: TK_TYPE_INT TK_ID TK_SEMICOLON
@@ -147,21 +171,22 @@ DECLARATION			: TK_TYPE_INT TK_ID TK_SEMICOLON
 
 ASSIGNMENT			: TK_ID TK_ASSIGN E TK_SEMICOLON
 								{
-									if(!symbol_table.count($1.label)) {
+									if(!current_scope->lookup($1.label)) {
 										yyerror("Erro Semantico: Variavel '" + $1.label + "' nao declarada!");
         								$$.traducao = "";
 												generalError = true;
 									} else {
 										if($3.type != "error") {
-											if(symbol_table[$1.label].type == $3.type) {
+											symbol* s = current_scope->lookup($1.label);
+											if(s->type == $3.type) {
 												if($3.type == "string") {
 													attributes temp = stringOrchestrator("=", $1, $3);
 													$$.traducao = $3.traducao + temp.traducao;
 												} else {
-													$$.traducao = $3.traducao + "\t" + symbol_table[$1.label].alias + " = " + $3.label + ";\n";
+													$$.traducao = $3.traducao + "\t" + s->alias + " = " + $3.label + ";\n";
 												}
 											} else {
-												yyerror("Erro Semantico: Tipos incompativeis! '" + $1.label + "' e " + symbol_table[$1.label].type + " mas recebeu " + $3.type);
+												yyerror("Erro Semantico: Tipos incompativeis! '" + $1.label + "' e " + s->type + " mas recebeu " + $3.type);
 												$$.traducao = $3.traducao;
 												generalError = true;
 											}
@@ -298,9 +323,11 @@ string resultType(string t1, string t2)
 attributes IDVerifier(string name)
 {
 	attributes r;
-	if(symbol_table.count(name)) {
-		r.label = symbol_table[name].alias;
-		r.type = symbol_table[name].type;
+	symbol*s = current_scope->lookup(name);
+	if(s) {
+		r.label = s->alias;
+		r.type = s->type;
+		r.value = s->value;
 		r.traducao = "";
 	} else {
 		yyerror("Erro Sintatico: Variavel '" + name + "' nao foi declarada!");
@@ -313,7 +340,7 @@ attributes IDVerifier(string name)
 }
 void varDeclaration(string name, string type)
 {
-	if(symbol_table.count(name)) {
+	if(current_scope->table.count(name)) {
 		yyerror("Erro Sintatico: Variavel '" + name + " ja declarada!");
 		generalError = true;
 		return;
@@ -327,7 +354,7 @@ void varDeclaration(string name, string type)
 			aliasType = type;
 		}
 		string t = genAlias(aliasType);
-		symbol_table[name] = {name, t, type};		
+		current_scope->table[name] = {name, t, type};
 	}
 }
 
@@ -530,20 +557,33 @@ attributes stringOrchestrator(string op, attributes left, attributes right)
 attributes stringAssignment(attributes left, attributes right)
 {
 	attributes r;
-	symbol &sym = symbol_table[left.label];
-	r.label = sym.alias;
+	symbol *sym = current_scope->lookup(left.label);
+	r.label = sym->alias;
 	r.type = "string";
 	r.value = right.value;
 	string tradFree = "";
-	if(holds_alternative<string>(sym.value) && !get<string>(sym.value).empty()) {
-		tradFree = "\tfree(" + sym.alias + ");\n";
+	if(holds_alternative<string>(sym->value) && !get<string>(sym->value).empty()) {
+		tradFree = "\tfree(" + sym->alias + ");\n";
 	}
-	sym.value = right.value;
+	sym->value = right.value;
 	r.traducao =
 		tradFree +
-		"\t" + sym.alias + " = (char*)malloc(" + to_string(get<string>(right.value).size() + 1) + ");\n" +
-		"\tstrcpy(" + sym.alias + ", \"" + get<string>(right.value) + "\");\n";
+		"\t" + sym->alias + " = (char*)malloc(" + to_string(get<string>(right.value).size() + 1) + ");\n" +
+		"\tstrcpy(" + sym->alias + ", " + right.label + ");\n";
 	return r;
+}
+
+
+// ÁREA DE ESCOPO
+void pushScope()
+{
+	current_scope = new Scope(current_scope);
+}
+void popScope()
+{
+	Scope*old = new Scope(current_scope);
+	current_scope = current_scope->parent;
+	delete old;
 }
 
 int main(int argc, char* argv[])
