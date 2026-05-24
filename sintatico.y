@@ -107,8 +107,9 @@ S 							: CMDS
 
 										if(stringScan) {
 											codigo_gerado +=
-												"\nchar _stringBuffer[2048];"
+												"\nchar _stringBuffer[10];"
 												"\nint _stringLength(char* _str);"
+												"\nvoid _keyboardCleanup();"
 												;
 										}
 
@@ -129,17 +130,59 @@ S 							: CMDS
 										if(stringScan) {
 											codigo_gerado += 
 												"\nint _stringLength(char* _str) {\n"
-												"\tint _len;\n"
-												"\tint _len2;\n"
-												"\t_len = 0;\n"
-												"\t_len2 = 0;\n"
-												"\twhile(_str[_len] != '\\0') {\n"
-												"\t\t_len++;\n"
-												"\t}\n"
-												"\t_len2 = _len + 1;\n"
-												"\t_len = _len2;\n"
-												"\treturn _len;\n"
-												"}\n";
+													"\tint _len;\n"
+													"\tchar _tChar;\n"
+													"\tchar _tStrClose;\n"
+													"\tint _temp1;\n"
+													"\t int _tCond;\n"
+
+													"\n"
+													"\t_len = 0;\n"
+													"\t_tChar = _str[_len];\n"
+													"\t_tStrClose = '\\0';\n"
+													"\t_temp1 = _tChar != _tStrClose;\n"
+													"\t_tCond = _temp1;\n"
+													"\twhile(_tCond) {\n"
+													"\t\t_len++;\n"
+													"\t\t_tChar = _str[_len];\n"
+													"\t\t_temp1 = _tChar != _tStrClose;\n"
+													"\t\t_tCond = _temp1;\n"
+													"\t}\n"
+													"\t_len++;\n"
+													"\treturn _len;\n"
+												"}"
+
+												"\nvoid _keyboardCleanup() {\n"
+													"\tchar _c1;\n"
+													"\tchar _c2;\n"
+													"\tint _cTemp1;\n"
+													"\tint _c3;\n"
+													"\tint _cTemp2;\n"
+													"\tint _c4;\n"
+													"\tint _cTemp3;\n"
+													"\tint _c5;\n"
+
+													"\n"
+
+													"\t_c1 = getchar();\n"
+													"\t_c2 = \'\\n\';\n"
+													"\t_cTemp1 = _c1 != _c2;\n"
+													"\t_c3 = _cTemp1;\n"
+													"\t_cTemp2 = _c1 != EOF;\n"
+													"\t_c4 = _cTemp2;\n"
+													"\t_cTemp3 = _c3 && _c4;\n"
+													"\t_c5 = _cTemp3;\n"
+													"\twhile(_c5) {\n"
+														"\t\t_c1 = getchar();\n"
+														"\t\t_cTemp1 = _c1 != _c2;\n"
+														"\t\t_c3 = _cTemp1;\n"
+														"\t\t_cTemp2 = _c1 != EOF;\n"
+														"\t\t_c4 = _cTemp2;\n"
+														"\t\t_cTemp3 = _c3 && _c4;\n"
+														"\t\t_c5 = _cTemp3;\n"
+													"\t}\n"
+												"}"
+												;
 										}
 									}
 									
@@ -429,7 +472,8 @@ attributes IOCodeGenerator(string op, attributes right) {
 			stringScan = true;
 			string scanLength = genAlias("int");
 			r.traducao =
-				"\tscanf(\" %2047[^\\n/]\", _stringBuffer);\n"
+				"\tscanf(\" %5[^\\n/]\", _stringBuffer);\n"
+				"\t_keyboardCleanup();\n"
 				"\t" + scanLength + " = _stringLength(_stringBuffer);\n"
 				"\t" + right.label + " = (char*)malloc(" + scanLength + ");\n"
 				"\tstrcpy(" + right.label + ", _stringBuffer);\n";

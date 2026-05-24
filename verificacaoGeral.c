@@ -3,8 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-char _stringBuffer[2048];
+char _stringBuffer[10];
 int _stringLength(char* _str);
+void _keyboardCleanup();
 
 int main() {
         char* _t1;
@@ -12,11 +13,13 @@ int main() {
         int _t3;
         int _t4;
 
-        scanf(" %2047[^\n/]", _stringBuffer);
+        scanf(" %5[^\n/]", _stringBuffer);
+        //_keyboardCleanup();
         _t3 = _stringLength(_stringBuffer);
         _t1 = (char*)malloc(_t3);
         strcpy(_t1, _stringBuffer);
-        scanf(" %2047[^\n/]", _stringBuffer);
+        scanf(" %5[^\n/]", _stringBuffer);
+        //_keyboardCleanup();
         _t4 = _stringLength(_stringBuffer);
         _t2 = (char*)malloc(_t4);
         strcpy(_t2, _stringBuffer);
@@ -27,13 +30,50 @@ int main() {
 
 int _stringLength(char* _str) {
         int _len;
-        int _len2;
+        char _tChar;
+        char _tStrClose;
+        int _temp1;
+         int _tCond;
+
         _len = 0;
-        _len2 = 0;
-        while(_str[_len] != '\0') {
+        _tChar = _str[_len];
+        _tStrClose = '\0';
+        _temp1 = _tChar != _tStrClose;
+        _tCond = _temp1;
+        while(_tCond) {
                 _len++;
+                _tChar = _str[_len];
+                _temp1 = _tChar != _tStrClose;
+                _tCond = _temp1;
         }
-        _len2 = _len + 1;
-        _len = _len2;
+        _len++;
         return _len;
 }
+/*void _keyboardCleanup() {
+        char _c1;
+        char _c2;
+        int _cTemp1;
+        int _c3;
+        int _cTemp2;
+        int _c4;
+        int _cTemp3;
+        int _c5;
+
+        _c1 = getchar();
+        _c2 = '\n';
+        _cTemp1 = _c1 != _c2;
+        _c3 = _cTemp1;
+        _cTemp2 = _c1 != EOF;
+        _c4 = _cTemp2;
+        _cTemp3 = _c3 && _c4;
+        _c5 = _cTemp3;
+        while(_c5) {
+                _c1 = getchar();
+                _cTemp1 = _c1 != _c2;
+                _c3 = _cTemp1;
+                _cTemp2 = _c1 != EOF;
+                _c4 = _cTemp2;
+                _cTemp3 = _c3 && _c4;
+                _c5 = _cTemp3;
+        }
+}*/
