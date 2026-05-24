@@ -26,6 +26,7 @@ struct symbol
 };
 struct labelPair
 {
+	string startLabel;
 	string falseLabel;
 	string endLabel;
 };
@@ -90,7 +91,7 @@ attributes ScanCodeGenerator(string op, attributes right);
 %token TK_ASSIGN TK_EQ TK_NEQ TK_LT TK_GT TK_LEQ TK_GEQ
 %token TK_AND TK_OR TK_NOT
 %token TK_SCAN TK_PRINT
-%token TK_IF TK_ELSE
+%token TK_IF TK_ELSE TK_WHILE
 %nonassoc CAST_PREC
 
 %start S
@@ -233,10 +234,10 @@ CMD							: DECLARATION
 								}
 								;
 
-BLOCK				: TK_LBRACE {pushScope();} CMDS TK_RBRACE {popScope();}
-					{
-						$$.traducao = $3.traducao;
-					}
+BLOCK						: TK_LBRACE {pushScope();} CMDS TK_RBRACE {popScope();}
+								{
+									$$.traducao = $3.traducao;
+								}
 
 DECLARATION			: TK_TYPE_INT TK_ID TK_SEMICOLON
 								{
@@ -277,9 +278,15 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E TK_SEMICOLON
 											if(s->type == $3.type) {
 												if($3.type == "string") {
 													attributes temp = stringOrchestrator("=", $1, $3);
-													$$.traducao = $3.traducao + temp.traducao;
+													$$.traducao =
+														$3.traducao +
+														temp.traducao
+													;
 												} else {
-													$$.traducao = $3.traducao + "\t" + s->alias + " = " + $3.label + ";\n";
+													$$.traducao =
+														$3.traducao +
+														"\t" + s->alias + " = " + $3.label + ";\n"
+													;
 												}
 											} else {
 												yyerror("Erro Semantico: Tipos incompativeis! '" + $1.label + "' e " + s->type + " mas recebeu " + $3.type);
@@ -295,44 +302,57 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E TK_SEMICOLON
 								;
 
 CONTROL					: IF BLOCK ELSE 
-							{
-								labelPair lp = labelStack.top();
-								labelStack.pop();
-								if($3.traducao == "") {
-									$$.traducao =
-										$1.traducao +
-										"\tif(" + $1.label + ") goto " + lp.endLabel + ";\n" +
-										$2.traducao +
-										"\t" + lp.endLabel + ":\n"
+								{
+									labelPair lp = labelStack.top();
+									labelStack.pop();
+									if($3.traducao == "") {
+										$$.traducao =
+											$1.traducao +
+											"\tif(" + $1.label + ") goto " + lp.endLabel + ";\n" +
+											$2.traducao +
+											"\t" + lp.endLabel + ":\n"
 										;
-								} else {
-									$$.traducao =
-										$1.traducao +
-										"\tif(" + $1.label + ") goto " + lp.falseLabel + ";\n" +
-										$2.traducao +
-										"\tgoto " + lp.endLabel + ";\n" +
-										"\t" + lp.falseLabel + ":\n" +
-										$3.traducao +
-										"\t" + lp.endLabel + ":\n"
+									} else {
+										$$.traducao =
+											$1.traducao +
+											"\tif(" + $1.label + ") goto " + lp.falseLabel + ";\n" +
+											$2.traducao +
+											"\tgoto " + lp.endLabel + ";\n" +
+											"\t" + lp.falseLabel + ":\n" +
+											$3.traducao +
+											"\t" + lp.endLabel + ":\n"
 										;
+									}
 								}
-							}
-							;
+								| WHILE BLOCK
+								{
+									labelPair lp = labelStack.top();
+									labelStack.pop();
+									$$.traducao =
+										$1.traducao +
+										$2.traducao +
+										"\tgoto " + lp.startLabel + ";\n" +
+										"\t" + lp.endLabel + ":\n"
+									;
+								}
+								;
 IF 							: TK_IF TK_LPAREN E TK_RPAREN
-							{
-								if($3.type != "bool") {
-									yyerror("Erro Semantico: Condição de 'if' deve ser do tipo booleano!");
-									$$.traducao = $3.traducao;
-									generalError = true;
+								{
+									if($3.type != "bool") {
+										yyerror("Erro Semantico: Condição de 'if' deve ser do tipo booleano!");
+										$$.traducao = $3.traducao;
+										generalError = true;
+									}
+									attributes negOperand = unopCodeGenerator("!", $3);
+									int controlID = genLabel();
+									labelPair lp;
+									lp.startLabel = "";
+									lp.falseLabel = "IFELSE_" + to_string(controlID);
+									lp.endLabel = "IFEND_" + to_string(controlID);
+									labelStack.push(lp);
+									$$ = negOperand;
 								}
-								attributes negOperand = unopCodeGenerator("!", $3);
-								int controlID = genLabel();
-								labelPair lp;
-								lp.falseLabel = "IFELSE_" + to_string(controlID);
-								lp.endLabel = "IFEND_" + to_string(controlID);
-								labelStack.push(lp);
-								$$ = negOperand;
-							}
+								;
 ELSE						: TK_ELSE CMD
 								{
 									$$.traducao = $2.traducao;
@@ -340,6 +360,27 @@ ELSE						: TK_ELSE CMD
 								|
 								{
 									$$.traducao = "";
+								}
+								;
+WHILE						: TK_WHILE TK_LPAREN E TK_RPAREN
+								{
+									if($3.type != "bool") {
+										yyerror("Erro Semantico: Condição de 'while' deve ser do tipo booleano!");
+										$$.traducao = $3.traducao;
+										generalError = true;
+									}
+									int controlID = genLabel();
+									labelPair lp;
+									lp.startLabel = "WHILESTART_" + to_string(controlID);
+									lp.falseLabel = "";
+									lp.endLabel = "WHILEEND_" + to_string(controlID);
+									labelStack.push(lp);
+									attributes negOperand = unopCodeGenerator("!", $3);
+									$$.traducao =
+										"\t" + lp.startLabel + ":\n" +
+										negOperand.traducao +
+										"\tif(" + negOperand.label + ") goto " + lp.endLabel + ";\n"
+									;
 								}
 								;
 
@@ -453,7 +494,7 @@ E								: E '+' E
 										$$.traducao = 
 											$3.traducao +
 											"\tprintf(\"" + $3.label + "\\n\"" + args + ");\n"
-											;
+										;
 									} else {
 										string format = "";
 										if ($3.type == "int") {
@@ -471,7 +512,7 @@ E								: E '+' E
 										$$.traducao =
 											$3.traducao +
 											"\tprintf(\"" + format + "\", " + $3.label + ");\n"
-											;
+										;
 									}
 								}
 								;
@@ -577,7 +618,8 @@ attributes ScanCodeGenerator(string op, attributes right) {
 			"\t_keyboardCleanup();\n"
 			"\t" + scanLength + " = _stringLength(_stringBuffer);\n"
 			"\t" + right.label + " = (char*)malloc(" + scanLength + ");\n"
-			"\tstrcpy(" + right.label + ", _stringBuffer);\n";
+			"\tstrcpy(" + right.label + ", _stringBuffer);\n"
+		;
 	} else {
 		r = errorReport("Erro Semantico: Tipo não suportado!");
 	}
@@ -608,7 +650,8 @@ attributes litCodeGenerator(string type, string value)
 		string attValue = get<string>(r.value);
 		r.traducao = 
 			"\t" + r.label + " = (char*)malloc(" + to_string(attValue.size() + 1) + ");\n" +
-			"\tstrcpy(" + r.label + ", \"" + value + "\");\n";
+			"\tstrcpy(" + r.label + ", \"" + value + "\");\n"
+		;
 	} else if(type == "char") {
 		r.traducao = "\t" + r.label + " = \'" + value + "\';\n";
 	} else{
@@ -707,7 +750,8 @@ attributes commonOpCodeGenerator(string op, attributes left, attributes right, s
 	r.value = opType;
 	r.traducao = 
 		accumulatedTransl + 
-		"\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n";
+		"\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n"
+	;
 	return r;
 }
 
@@ -725,7 +769,8 @@ attributes unopCodeGenerator(string op, attributes right)
     r.type = "bool";
     r.traducao = 
 			right.traducao + 
-			"\t" + r.label + " = " + op + right.label + ";\n";
+			"\t" + r.label + " = " + op + right.label + ";\n"
+		;
     return r;
 }
 attributes logicRelCodeGenerator(string op, attributes left, attributes right)
@@ -766,7 +811,8 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right)
 			left.traducao + 
 			right.traducao + 
 			extraTrad + 
-      "\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n";
+      "\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n"
+		;
     return r;
 }
 
@@ -805,7 +851,8 @@ attributes castCodeGenerator(string tType, attributes right)
     r.type = tType;
     r.traducao = 
 			right.traducao + 
-			"\t" + r.label + " = (" + tType + ") " + right.label + ";\n";
+			"\t" + r.label + " = (" + tType + ") " + right.label + ";\n"
+		;
     return r;
 }
 
@@ -837,7 +884,8 @@ attributes stringAssignment(attributes left, attributes right)
 	r.traducao =
 		tradFree +
 		"\t" + sym->alias + " = (char*)malloc(" + to_string(get<string>(right.value).size() + 1) + ");\n" +
-		"\tstrcpy(" + sym->alias + ", " + right.label + ");\n";
+		"\tstrcpy(" + sym->alias + ", " + right.label + ");\n"
+		;
 	return r;
 }
 

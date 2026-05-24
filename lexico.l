@@ -55,6 +55,7 @@ STRING              \"{STRCONTENT}\"
 
 "if"                { return TK_IF; }
 "else"              { return TK_ELSE; }
+"while"             { return TK_WHILE; }
 
 "true"              { yylval.label = "1"; return TK_BOOL; }
 "false"             { yylval.label = "0"; return TK_BOOL; }
