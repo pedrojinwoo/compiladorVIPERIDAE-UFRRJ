@@ -427,12 +427,12 @@ string genAlias(string type)
 string resultType(string t1, string t2)
 {
 	if(t1 == "error" || t2 == "error") return "error";
-	if(t1 == "char" || t2 == "char") return "error";
-	if(t1 == "bool" || t2 == "bool") return "error";
-	if(t1 == "float" || t2 == "float") return "float";
 	if(t1 == "string" || t2 == "string" || t1 == "complexString" || t2 == "complexString") {
 		return "complexString";
 	}
+	if(t1 == "char" || t2 == "char") return "error";
+	if(t1 == "bool" || t2 == "bool") return "error";
+	if(t1 == "float" || t2 == "float") return "float";
 	return "int";
 }
 attributes errorReport(string msg) {
@@ -573,7 +573,7 @@ attributes complexStringCodeGenerator(attributes left, attributes right)
 	r.traducao = left.traducao + right.traducao;
 	string leftMasks = "";
 	string rightMasks = "";
-    if (left.type == "string_composta") {
+    if (left.type == "complexString") {
       leftMasks = left.label;
     } else if (left.type == "string") {
       leftMasks = "%s";
@@ -584,7 +584,7 @@ attributes complexStringCodeGenerator(attributes left, attributes right)
     } else if (left.type == "char") {
       leftMasks = "%c";
     }
-    if (right.type == "string_composta") {
+    if (right.type == "complexString") {
       rightMasks = right.label;
     } else if (right.type == "string") {
       rightMasks = "%s";
@@ -597,13 +597,13 @@ attributes complexStringCodeGenerator(attributes left, attributes right)
     }
     r.label = leftMasks + rightMasks;
     string arg_left = "";
-    if (left.type == "string_composta") {
+    if (left.type == "complexString") {
       arg_left = get<string>(left.value);
     } else {
       arg_left = ", " + left.label;
     }
     string arg_right = "";
-    if (right.type == "string_composta") {
+    if (right.type == "complexString") {
       arg_right = get<string>(right.value);
     } else {
       arg_right = ", " + right.label;
