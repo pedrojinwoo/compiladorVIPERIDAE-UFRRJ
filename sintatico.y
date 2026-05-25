@@ -74,6 +74,7 @@ attributes unopCodeGenerator(string op, attributes right);
 attributes litCodeGenerator(string type, string value);
 attributes IDVerifier(string name);
 attributes castCodeGenerator(string tType, attributes right);
+string implicitCast(attributes left, attributes right, string &leftLabel, string &rightLabel, string &extraTrad);
 attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes stringOrchestrator(string op, attributes left, attributes right);
 // attributes stringOrchestrator(string op, attributes iterable, int factor);
@@ -148,7 +149,6 @@ S 							: CMDS
 													"\tchar _tStrClose;\n"
 													"\tint _temp1;\n"
 													"\t int _tCond;\n"
-
 													"\n"
 													"\t_len = 0;\n"
 													"\t_tChar = _str[_len];\n"
@@ -166,34 +166,32 @@ S 							: CMDS
 												"}"
 
 												"\nvoid _keyboardCleanup() {\n"
-													"\tchar _c1;\n"
-													"\tchar _c2;\n"
-													"\tint _cTemp1;\n"
-													"\tint _c3;\n"
-													"\tint _cTemp2;\n"
+													"\tint _c1;\n"
+													"\tint _c2;\n"
+													"\tchar _c3;\n"
 													"\tint _c4;\n"
-													"\tint _cTemp3;\n"
 													"\tint _c5;\n"
-
+													"\tint _c6;\n"
+													"\tint _c7;\n"
+													"\tint _c8;\n"
+													"\tint _c9;\n"
+													"\tint _c10;\n"
 													"\n"
-
-													"\t_c1 = getchar();\n"
-													"\t_c2 = \'\\n\';\n"
-													"\t_cTemp1 = _c1 != _c2;\n"
-													"\t_c3 = _cTemp1;\n"
-													"\t_cTemp2 = _c1 != EOF;\n"
-													"\t_c4 = _cTemp2;\n"
-													"\t_cTemp3 = _c3 && _c4;\n"
-													"\t_c5 = _cTemp3;\n"
-													"\twhile(_c5) {\n"
-														"\t\t_c1 = getchar();\n"
-														"\t\t_cTemp1 = _c1 != _c2;\n"
-														"\t\t_c3 = _cTemp1;\n"
-														"\t\t_cTemp2 = _c1 != EOF;\n"
-														"\t\t_c4 = _cTemp2;\n"
-														"\t\t_cTemp3 = _c3 && _c4;\n"
-														"\t\t_c5 = _cTemp3;\n"
-													"\t}\n"
+													"\t_c2 = 0;\n"
+													"\t_c1 = _c2;\n"
+													"\tWHILESTART_1:\n"
+													"\t_c3 = \'\\n\';\n"
+													"\t_c5 = (int) _c3;\n"
+													"\t_c4 = _c1 != _c5;\n"
+													"\t_c6 = -1;\n"
+													"\t_c7 = _c1 != _c6;\n"
+													"\t_c8 = _c4 && _c7;\n"
+													"\t_c9 = !_c8;\n"
+													"\tif(_c9) goto WHILEEND_1;\n"
+													"\t_c10 = getchar();\n"
+													"\t_c1 = _c10;\n"
+													"\tgoto WHILESTART_1;\n"
+													"\tWHILEEND_1:\n"
 												"}"
 												;
 										}
@@ -730,26 +728,21 @@ attributes complexStringCodeGenerator(attributes left, attributes right)
 attributes commonOpCodeGenerator(string op, attributes left, attributes right, string opType)
 {
 	attributes r;
-	string accumulatedTransl = left.traducao + right.traducao;
-	string leftLabel = left.label;
-	string rightLabel = right.label;
-	if(opType == "float") {
-		if(left.type == "int") {
-			string t_conv = genAlias("float");
-			accumulatedTransl += "\t" + t_conv + " = (float) " + left.label + ";\n";
-			leftLabel = t_conv;
-		}
-		if(right.type == "int") {
-			string t_conv = genAlias("float");
-			accumulatedTransl += "\t" + t_conv + " = (float) " + right.label + ";\n";
-			rightLabel = t_conv;
-		}
+	string leftLabel = "";
+	string rightLabel = "";
+	string extraTrad = "";
+	string finalType = implicitCast(left, right, leftLabel, rightLabel, extraTrad);
+	if(finalType == "error") {
+		r = errorReport("Erro Semantico: Tipos incompatíveis para a operação '" + op + "'");
+		return r;
 	}
-	r.label = genAlias(opType);
-	r.type = opType;
-	r.value = opType;
-	r.traducao = 
-		accumulatedTransl + 
+	r.label = genAlias(finalType);
+	r.type = finalType;
+	r.value = finalType;
+	r.traducao =
+		left.traducao + 
+		right.traducao + 
+		extraTrad + 
 		"\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n"
 	;
 	return r;
@@ -763,6 +756,7 @@ attributes unopCodeGenerator(string op, attributes right)
 	attributes r;
     if(right.type != "bool") {
 			r = errorReport("Erro Semântico: Operador lógico '!' exige tipo booleano!");
+			generalError = true;
 			return r;
     }
     r.label = genAlias("int");
@@ -778,82 +772,126 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right)
 	attributes r;
 	if(left.type == "error" || right.type == "error") {
 		r = errorReport("Erro Semântico: Tipos incompatíveis para a operação '" + op + "'");
+		generalError = true;
 		return r;
 	}
 	if(op == "&&" || op == "||") {
 		if(left.type != "bool" || right.type != "bool") {
 			r = errorReport("Erro Semântico: Operadores lógicos exigem tipos booleanos!");
+			generalError = true;
 			return r;
 		}
-	}
-	if((left.type == "char"&&right.type!="char") || (left.type!="char"&&right.type=="char")) {
-		r = errorReport("Erro Semântico: Não é possível comparar char com outros tipos!");
-		return r;
-	}
-    r.label = genAlias("int"); 
-    r.type = "bool"; 
-    string leftLabel = left.label;
-    string rightLabel = right.label;
-    string extraTrad = "";
-    if(left.type != right.type && (left.type == "float" || right.type == "float")) {
-        if(left.type == "int") {
-            string t = genAlias("float");
-            extraTrad += "\t" + t + " = (float) " + left.label + ";\n";
-            leftLabel = t;
-        }
-        if(right.type == "int") {
-            string t = genAlias("float");
-            extraTrad += "\t" + t + " = (float) " + right.label + ";\n";
-            rightLabel = t;
-        }
-    }
-    r.traducao = 
+		r.label = genAlias("int");
+		r.type = "bool";
+		r.traducao = 
 			left.traducao + 
 			right.traducao + 
-			extraTrad + 
-      "\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n"
+			"\t" + r.label + " = " + left.label + " " + op + " " + right.label + ";\n"
 		;
-    return r;
+		return r;
+	}
+	r.label = genAlias("int"); 
+	r.type = "bool"; 
+	string leftLabel = "";
+	string rightLabel = "";
+	string extraTrad = "";
+	string finalType = implicitCast(left, right, leftLabel, rightLabel, extraTrad);
+	if(finalType == "error") {
+		r = errorReport("Erro Semântico: Tipos incompatíveis para a operação '" + op + "'");
+		generalError = true;
+		return r;
+	}
+	r.traducao = 
+		left.traducao + 
+		right.traducao + 
+		extraTrad + 
+		"\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n"
+	;
+	return r;
 }
 
 
-// CONVERSÃO EXPLÍCITA
+// CONVERSÃO
 attributes castCodeGenerator(string tType, attributes right)
 {
 	attributes r;
 	if(right.type == "error") {
 		r = errorReport("");
+		generalError = true;
 		return r;
 	}
-	bool error = false;
-	if(tType != "char") {
-		if(right.type == "char") error = true;
-	}
-	else if(tType == "char") {
-		if(right.type != "char") error = true;
-	}
-    if (error) {
-			r = errorReport("Erro Semântico: Conversão ilegal de '" + right.type + "' para '" + tType + "'");
-			return r;
-    }
-    if (right.type == tType) {
+	if (right.type == tType) {
 		return right;
 	}
-	string aliasType;
-		if(tType == "bool") {
-			aliasType = "int";
-		} else if(tType == "string") {
-			aliasType = "char*";
-		} else {
-			aliasType = tType;
+	bool isAllowed = false;
+	if (tType == "int") {
+		if (right.type == "float" || right.type == "char") {
+			isAllowed = true;
 		}
-    r.label = genAlias(aliasType);
-    r.type = tType;
-    r.traducao = 
-			right.traducao + 
-			"\t" + r.label + " = (" + tType + ") " + right.label + ";\n"
-		;
-    return r;
+	}
+	else if (tType == "float") {
+		if (right.type == "int") {
+			isAllowed = true;
+		}
+	}
+	else if (tType == "bool") {
+		if (right.type == "int") {
+			isAllowed = true;
+		}
+	}
+	else if (tType == "char" || tType == "string") {
+		isAllowed = false; 
+	}
+	if (!isAllowed) {
+		r =errorReport("Erro Semântico: Conversão explícita (cast) inválida de '" + right.type + "' para '" + tType + "'");
+		generalError = true;
+		return r;
+	}
+	string aliasType;
+	if(tType == "bool") {
+		aliasType = "int";
+	} else if(tType == "string") {
+		aliasType = "char*";
+	} else {
+		aliasType = tType;
+	}
+	r.label = genAlias(aliasType);
+	r.type = tType;
+	r.value = tType;
+	r.traducao = 
+		right.traducao + 
+		"\t" + r.label + " = (" + tType + ") " + right.label + ";\n"
+	;
+	return r;
+}
+string implicitCast(attributes left, attributes right, string &leftLabel, string &rightLabel, string &extraTrad) {
+	leftLabel = left.label;
+	rightLabel = right.label;
+	if(left.type == right.type) {
+		return left.type;
+	}
+	if(left.type == "error" || right.type == "error") {
+		return "error";
+	}
+	string targetType = "";
+	if(left.type == "float" || right.type == "float") {
+		targetType = "float";
+	} else if(left.type == "int" || right.type == "int") {
+		targetType = "int";
+	}
+	if(targetType != "") {
+		if(left.type != targetType) {
+			string t = genAlias(targetType);
+			extraTrad += "\t" + t + " = (" + targetType + ") " + left.label + ";\n";
+			leftLabel = t;
+		}
+		if(right.type != targetType) {
+			string t = genAlias(targetType);
+			extraTrad += "\t" + t + " = (" + targetType + ") " + right.label + ";\n";
+			rightLabel = t;
+		}
+	}
+	return targetType;
 }
 
 

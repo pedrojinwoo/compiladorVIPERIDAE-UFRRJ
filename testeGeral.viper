@@ -1,6 +1,5 @@
-int I;
-I = 0;
-while(I<5) {
-  I = I + 1;
-  print(I);
+int c;
+c = 0;
+while((c!='\n')&&(c!=EOF)){
+  c = 1;
 }
