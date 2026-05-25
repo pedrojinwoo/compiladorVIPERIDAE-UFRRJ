@@ -43,6 +43,7 @@ STRING              \"{STRCONTENT}\"
 "!"                 { return TK_NOT; }
 
 ";"                 { return TK_SEMICOLON; }
+"all"               { return TK_ALL; }
 
 "int"               { return TK_TYPE_INT; }
 "float"             { return TK_TYPE_FLOAT; }
@@ -52,6 +53,8 @@ STRING              \"{STRCONTENT}\"
 
 "scan"              { return TK_SCAN; }
 "print"             { return TK_PRINT; }
+
+"break"             { return TK_BREAK; }
 
 "if"                { return TK_IF; }
 "else"              { return TK_ELSE; }

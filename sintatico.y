@@ -59,6 +59,7 @@ bool stringScan = false;
 string codigo_gerado;
 map<string, string> alias_types;
 static stack<labelPair> labelStack;
+stack<string> loopEndStack;
 Scope*current_scope = new Scope(nullptr);
 int yylex(void);
 void yyerror(string);
@@ -84,9 +85,10 @@ void pushScope();
 void popScope();
 attributes errorReport(string msg);
 attributes ScanCodeGenerator(string op, attributes right);
+attributes breakCodeGenerator(int depth);
 %}
 
-%token TK_SEMICOLON
+%token TK_SEMICOLON TK_ALL
 %token TK_ID TK_NUM_INT TK_NUM_FLOAT TK_CHAR TK_BOOL TK_STRING
 %token TK_TYPE_INT TK_TYPE_FLOAT TK_TYPE_CHAR TK_TYPE_BOOL TK_TYPE_STRING
 %token TK_LPAREN TK_RPAREN TK_LBRACE TK_RBRACE
@@ -94,6 +96,7 @@ attributes ScanCodeGenerator(string op, attributes right);
 %token TK_AND TK_OR TK_NOT
 %token TK_SCAN TK_PRINT
 %token TK_IF TK_ELSE TK_WHILE TK_FOR
+%token TK_BREAK
 %nonassoc CAST_PREC
 
 %start S
@@ -231,12 +234,38 @@ CMD							: DECLARATION
 								{
 									$$.traducao = $1.traducao;
 								}
+								| BREAK
+								{
+									$$.traducao = $1.traducao;
+								}
 								;
 
 BLOCK						: TK_LBRACE {pushScope();} CMDS TK_RBRACE {popScope();}
 								{
 									$$.traducao = $3.traducao;
 								}
+
+BREAK						: TK_BREAK TK_SEMICOLON
+								{
+									if(loopEndStack.empty()) {
+										yyerror("Erro Semantico: 'break' fora de loop!");
+										$$.traducao = "";
+										generalError = true;
+									} else {
+										string endLabel = loopEndStack.top();
+										$$.traducao = "\tgoto " + endLabel + ";\n";
+									}
+								}
+								| TK_BREAK TK_NUM_INT TK_SEMICOLON
+								{
+									int depth = stoi($2.label);
+									$$ = breakCodeGenerator(depth);
+								}
+								| TK_BREAK TK_ALL TK_SEMICOLON
+								{
+									$$ = breakCodeGenerator(-1);
+								}
+								;
 
 DECLARATION			: TK_TYPE_INT TK_ID TK_SEMICOLON
 								{
@@ -359,6 +388,7 @@ CONTROL					: IF BLOCK ELSE
 									lp.falseLabel = "";
 									lp.stepLabel = "FORSTEP_" + to_string(controlID);
 									lp.endLabel = "FOREND_" + to_string(controlID);
+									loopEndStack.push(lp.endLabel);
 									attributes negOperand = unopCodeGenerator("!", $5);
 									$$.traducao =
 										$3.traducao +
@@ -414,6 +444,7 @@ WHILE						: TK_WHILE TK_LPAREN E TK_RPAREN
 									lp.stepLabel = "";
 									lp.endLabel = "WHILEEND_" + to_string(controlID);
 									labelStack.push(lp);
+									loopEndStack.push(lp.endLabel);
 									attributes negOperand = unopCodeGenerator("!", $3);
 									$$.traducao =
 										"\t" + lp.startLabel + ":\n" +
@@ -1022,6 +1053,40 @@ void popScope()
 	Scope*old = new Scope(current_scope);
 	current_scope = current_scope->parent;
 	delete old;
+}
+
+
+
+// BREAK CONTROL
+attributes breakCodeGenerator(int depth) {
+	attributes r;
+	if(loopEndStack.empty()) {
+		r = errorReport("Erro Semântico: 'break' fora de loop!");
+		generalError = true;
+		return r;
+	}
+	stack<string> tempStack = loopEndStack;
+	string targetLabel = "";
+	if(depth == -1) {
+		while(!tempStack.empty()) {
+			targetLabel = tempStack.top();
+			tempStack.pop();
+		}
+	} else {
+		int counter = depth;
+		while(counter>0 && !tempStack.empty()) {
+			targetLabel = tempStack.top();
+			tempStack.pop();
+			counter--;
+		}
+		if(counter > 0) {
+			r = errorReport("Erro Semântico: Quantidade de níveis de 'break' superior à profundidade de loops!");
+			generalError = true;
+			return r;
+		}
+	}
+	r.traducao = "\tgoto " + targetLabel + ";\n";
+	return r;
 }
 
 
