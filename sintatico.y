@@ -36,6 +36,7 @@ struct switchCase
 	string value;
 	string label;
 	string traducao;
+	int refSwitch;
 };
 
 // CLASSE PARA ESCOPO
@@ -67,7 +68,7 @@ map<string, string> alias_types;
 static stack<labelPair> labelStack;
 stack<string> loopEndStack;
 vector<switchCase> switchCasesList;
-int switchID;
+stack<int> switchIdStack;
 int caseCounter = 0;
 Scope*current_scope = new Scope(nullptr);
 int yylex(void);
@@ -425,30 +426,31 @@ CONTROL					: IF BLOCK ELSE
 								| SWITCHHEADER TK_LBRACE CASELIST TK_RBRACE
 								{
 									string endLabel = loopEndStack.top();
-									$$.type = "void";
-									$$.label = "";
-									string switchGotos = $1.traducao;
-									string switchCases = "";
-									string defaultLabel = endLabel;
-									for (const auto& actualCase : switchCasesList) {
-										if(actualCase.value == "default") {
-											defaultLabel = actualCase.label;
-										} else {
-											string verifier = genAlias("int");
-											switchGotos += "\t" + verifier + " = " + $1.label + " == " + actualCase.value + ";\n";
-											switchGotos += "\tif(" + verifier + ") goto " + actualCase.label + ";\n";
+									int actualId = switchIdStack.top();
+                  $$.type = "void";
+                  string code = $1.traducao; 
+									vector<switchCase> casesLeft;
+                  for(const auto& c : switchCasesList) {
+										if(c.refSwitch == actualId) {
+                      string verifier = genAlias("int");
+                      code += c.traducao;
+                      code += "\t" + verifier + " = " + $1.label + " == " + c.value + ";\n";
+                      code += "\tif(" + verifier + ") goto " + c.label + ";\n";
+                    } else {
+											casesLeft.push_back(c);
 										}
-										switchCases += actualCase.traducao;
-									}
-									switchGotos += "\tgoto " + defaultLabel + ";\n";
-									$$.traducao =
-										switchGotos +
-										switchCases +
+                  }
+                  code += "\tgoto " + endLabel + ";\n";
+                  $$.traducao =
+										code +
+										$3.traducao +
 										"\t" + endLabel + ":\n"
 									;
-									labelStack.pop();
-									loopEndStack.pop();
-									switchCasesList.clear();
+									switchCasesList = casesLeft;
+									switchIdStack.pop();
+                  //switchCasesList.clear();
+                  labelStack.pop();
+                  loopEndStack.pop();
 								}
 								;
 IF 							: TK_IF TK_LPAREN E TK_RPAREN
@@ -504,59 +506,64 @@ WHILE						: TK_WHILE TK_LPAREN E TK_RPAREN
 SWITCHHEADER		: TK_SWITCH TK_LPAREN E TK_RPAREN
 								{
 									if($3.type == "error") {
-										errorReport("Erro Semantico: Expressão inválida no controle 'switch'!");
-										generalError = true;
-									}
-									switchID = genLabel();		
-									labelPair lp;
-										lp.startLabel = "";
-										lp.falseLabel = "";
-										lp.stepLabel = "";
-										lp.endLabel = "SWITCHEND_" + to_string(switchID);
-									labelStack.push(lp);
-									loopEndStack.push(lp.endLabel);
-									$$ = $3;
-
+                    errorReport("Erro Semantico: Expressão inválida no 'switch'!");
+                    generalError = true;
+                  }
+                  int switchId = genLabel();
+									switchIdStack.push(switchId);
+                  string endLabel = "SWITCHEND_" + to_string(switchId);
+                  labelPair lp;
+                    lp.startLabel = "";
+                    lp.falseLabel = "";
+                    lp.stepLabel = "";
+                    lp.endLabel = endLabel;
+                  labelStack.push(lp);
+                  loopEndStack.push(endLabel);
+                  $$.label = $3.label; 
+                  $$.traducao = $3.traducao;
+                  //switchCasesList.clear();
 								}
 								;
 CASELIST				: CASEELEMENT CASELIST
 								{
-									$$ = $2;
+									$$.traducao = $1.traducao + $2.traducao;
 								}
 								| CASEELEMENT
 								{
-									$$ = $1;
+									$$.traducao = $1.traducao;
 								}
 								;
 CASEELEMENT		  : TK_CASE LITERAL TK_COLON CMDS
 								{
 									if($4.traducao.find("goto SWITCHEND_") == string::npos) {
-										errorReport("Erro Semantico: O uso de break é obrigatório no final de cada case!");
-										generalError = true;
-									}
-									switchCase c;
-										c.value = $2.label;
-										c.label = "CASE" + to_string(switchID) + "_" + to_string(caseCounter++);
-										c.traducao =
-											"\t" + c.label + ":\n" +
-											$4.traducao
-										;
-									switchCasesList.push_back(c);
+                    errorReport("Erro Semantico: Break obrigatório no final do case!");
+                    generalError = true;
+                  }
+                  int refSwitchId = switchIdStack.top();
+                  string caseLabel = "CASE" + to_string(refSwitchId) + "_" + to_string(caseCounter++);
+                  switchCase c;
+                  c.value = $2.label;
+                  c.traducao= $2.traducao;
+                  c.label = caseLabel;
+									c.refSwitch = refSwitchId;
+                  switchCasesList.push_back(c);
+                  $$.traducao = "\t" + caseLabel + ":\n" + $4.traducao;
 								}
 								| TK_DEFAULT TK_COLON CMDS
 								{
 									if($3.traducao.find("goto SWITCHEND_") == string::npos) {
-										errorReport("Erro Semantico: O uso de break é obrigatório no final de cada case!");
-										generalError = true;
-									}
-									switchCase c;
-										c.value = "default";
-										c.label = "DEFAULT" + to_string(switchID);
-										c.traducao =
-											"\t" + c.label + ":\n" +
-											$3.traducao
-										;
-									switchCasesList.push_back(c);
+                    errorReport("Erro Semantico: Break obrigatório no default!");
+                    generalError = true;
+                  }
+                  int refSwitchId = switchIdStack.top();
+                  string defaultLabel = "DEFAULT_" + to_string(refSwitchId);
+                  switchCase c;
+                  c.value = $0.label;
+                  c.traducao= "";
+                  c.label = defaultLabel;
+									c.refSwitch = refSwitchId;
+                  switchCasesList.push_back(c);
+                  $$.traducao = "\t" + defaultLabel + ":\n" + $3.traducao;
 								}
 								;	
 
