@@ -1,14 +1,17 @@
 int I;
-I = 0;
-switch(I) {
-  case 0:
+I = 1;
+if(I == 0){
+  print(0);
+} elif (I==1) {
   print(1);
-    int I2;
-    I2 = 0;
-    switch(I) {
-      case 0:
-        print(2);
-        break;
-    }
-    break;
+  if(I == 0){
+    print(0);
+  } elif (I==1) {
+    print(1);
+  } else {
+    print(2);
+  }
+} else {
+  print(2);
 }
+

@@ -70,6 +70,7 @@ stack<string> loopEndStack;
 vector<switchCase> switchCasesList;
 stack<int> switchIdStack;
 int caseCounter = 0;
+int elifCounter = 0;
 Scope*current_scope = new Scope(nullptr);
 int yylex(void);
 void yyerror(string);
@@ -105,7 +106,7 @@ attributes breakCodeGenerator(int depth);
 %token TK_ASSIGN TK_EQ TK_NEQ TK_LT TK_GT TK_LEQ TK_GEQ
 %token TK_AND TK_OR TK_NOT
 %token TK_SCAN TK_PRINT
-%token TK_IF TK_ELSE TK_WHILE TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
+%token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
 %token TK_BREAK TK_ALL
 %nonassoc CAST_PREC
 
@@ -344,10 +345,10 @@ ASSIGNCMD				: ASSIGNMENT TK_SEMICOLON
 								}
 								;
 
-CONTROL					: IF BLOCK ELSE 
+CONTROL					: IF BLOCK ELIF ELSE 
 								{
 									labelPair lp = labelStack.top();
-									if($3.traducao == "") {
+									if($3.traducao == "" && $4.traducao == "") {
 										$$.traducao =
 											$1.traducao +
 											"\tif(" + $1.label + ") goto " + lp.endLabel + ";\n" +
@@ -362,6 +363,7 @@ CONTROL					: IF BLOCK ELSE
 											"\tgoto " + lp.endLabel + ";\n" +
 											"\t" + lp.falseLabel + ":\n" +
 											$3.traducao +
+											$4.traducao +
 											"\t" + lp.endLabel + ":\n"
 										;
 									}
@@ -469,6 +471,35 @@ IF 							: TK_IF TK_LPAREN E TK_RPAREN
 										lp.endLabel = "IFEND_" + to_string(controlID);
 									labelStack.push(lp);
 									$$ = negOperand;
+								}
+								;
+ELIF						: ELIFELEMENT ELIF
+								{
+									$$.traducao = $1.traducao + $2.traducao;
+								}
+								|
+								{
+									$$.traducao = "";
+								}
+								;
+ELIFELEMENT			: TK_ELIF TK_LPAREN E TK_RPAREN BLOCK
+								{
+									if($3.type != "bool") {
+										yyerror("Erro Semantico: Condição de 'elif' deve ser do tipo booleano!");
+										$$.traducao = $3.traducao;
+										generalError = true;
+									}
+									attributes negOperand = unopCodeGenerator("!", $3);
+									string refId = labelStack.top().falseLabel.substr(7);
+									string genEndLabel = labelStack.top().endLabel;
+									string elifLabel = "ELIF" + refId + "_" + to_string(elifCounter++);
+									$$.traducao = 
+										negOperand.traducao +
+										"\tif(" + negOperand.label + ") goto " + elifLabel + ";\n" +
+										$5.traducao +
+										"\tgoto " + genEndLabel + ";\n" +
+										"\t" + elifLabel + ":\n"
+									;
 								}
 								;
 ELSE						: TK_ELSE BLOCK

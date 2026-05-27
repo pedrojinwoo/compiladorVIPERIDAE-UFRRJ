@@ -59,6 +59,7 @@ STRING              \"{STRCONTENT}\"
 
 "if"                { return TK_IF; }
 "else"              { return TK_ELSE; }
+"elif"              { return TK_ELIF; }
 "while"             { return TK_WHILE; }
 "for"               { return TK_FOR; }
 "switch"            { return TK_SWITCH; }
