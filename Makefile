@@ -24,30 +24,38 @@ translate: glf
 		glf < $(FILE)
 #		./glf < $(FILE) # (PARA LINUX/MAC)
 
+.SILENT:
 run: glf
-		./glf < $(FILE) > /tmp/foca_output.c && gcc /tmp/foca_output.c -o /tmp/foca_output && /tmp/foca_output
-
+		@
+			glf < testeGeral.viper > output.c && \
+			type output.c && \
+			echo. && \
+			gcc output.c -o exec.exe && \
+			exec.exe && \
+			del /f /q output.c exec.exe && \
+			echo. && \
+			echo. && \
+			echo.  \
 
 ifndef DIR
 extra:
 	$(ERROR Erro: Pasta necessária)
 else
 FILES_TO_RUN := $(wildcard $(DIR)/*.viper)
-
 extra: glf
 	@$(foreach f,$(FILES_TO_RUN), \
 		echo "$(f)" && \
 		glf < $(f) > output.c && \
 		type output.c && \
-		echo . && \
+		echo. && \
 		gcc output.c -o exec.exe && \
 		exec.exe && \
 		del /f /q output.c exec.exe && \
-		echo . && \
-		echo . && \
-		echo .  \
+		echo. && \
+		echo. && \
+		echo.  \
 	)
 endif
 
 clean:
-	@$ del /f /q y.tab.c y.tab.h lex.yy.c glf.exe
+	del /f /q y.tab.c y.tab.h lex.yy.c glf.exe

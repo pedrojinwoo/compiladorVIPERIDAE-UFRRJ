@@ -44,6 +44,7 @@ STRING              \"{STRCONTENT}\"
 
 ";"                 { return TK_SEMICOLON; }
 ":"                 { return TK_COLON; }
+","                 { return TK_COMA; }
 "all"               { return TK_ALL; }
 
 "int"               { return TK_TYPE_INT; }
@@ -51,6 +52,8 @@ STRING              \"{STRCONTENT}\"
 "char"              { return TK_TYPE_CHAR; }
 "bool"              { return TK_TYPE_BOOL; }
 "string"            { return TK_TYPE_STRING; }
+
+"strConcat"         { return TK_STRCONCAT; }
 
 "scan"              { return TK_SCAN; }
 "print"             { return TK_PRINT; }

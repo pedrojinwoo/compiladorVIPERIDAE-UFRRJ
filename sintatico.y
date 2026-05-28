@@ -94,6 +94,7 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes stringOrchestrator(string op, attributes left, attributes right);
 // attributes stringOrchestrator(string op, attributes iterable, int factor);
 attributes stringAssignment(attributes left, attributes right);
+attributes stringConcatenation(attributes left, attributes right);
 void pushScope();
 void popScope();
 attributes errorReport(string msg);
@@ -101,7 +102,7 @@ attributes ScanCodeGenerator(string op, attributes right);
 attributes breakCodeGenerator(int depth);
 %}
 
-%token TK_SEMICOLON TK_COLON
+%token TK_SEMICOLON TK_COLON TK_COMA
 %token TK_ID TK_NUM_INT TK_NUM_FLOAT TK_CHAR TK_BOOL TK_STRING
 %token TK_TYPE_INT TK_TYPE_FLOAT TK_TYPE_CHAR TK_TYPE_BOOL TK_TYPE_STRING
 %token TK_LPAREN TK_RPAREN TK_LBRACE TK_RBRACE
@@ -110,6 +111,7 @@ attributes breakCodeGenerator(int depth);
 %token TK_SCAN TK_PRINT
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
 %token TK_BREAK TK_ALL TK_CONTINUE
+%token TK_STRCONCAT
 %nonassoc CAST_PREC
 
 %start S
@@ -773,6 +775,10 @@ BASE						:	LITERAL
 									$$.traducao = $2.traducao;
 									$$.type = $2.type;
 								}
+								| STRINGACTIONS
+								{
+									$$ = $1;
+								}
 								;
 LITERAL					: TK_NUM_INT
 								{
@@ -833,6 +839,10 @@ IO							: TK_SCAN TK_LPAREN TK_ID TK_RPAREN
 									}
 								}
 								;
+STRINGACTIONS		: TK_STRCONCAT TK_LPAREN E TK_COMA E TK_RPAREN
+								{
+									$$ = stringOrchestrator("concat", $3, $5);
+								}
 
 %%
 
@@ -1223,6 +1233,9 @@ attributes stringOrchestrator(string op, attributes left, attributes right)
 	if(op == "=") {
 		return stringAssignment(left, right);
 	}
+	if(op == "concat") {
+		return stringConcatenation(left, right);
+	}
 	return attributes();
 }
 /*attributes stringOrchestrator(string op, attributes iterable, int factor)
@@ -1246,6 +1259,34 @@ attributes stringAssignment(attributes left, attributes right)
 		"\t" + sym->alias + " = (char*)malloc(" + to_string(get<string>(right.value).size() + 1) + ");\n" +
 		"\tstrcpy(" + sym->alias + ", " + right.label + ");\n"
 		;
+	return r;
+}
+attributes stringConcatenation(attributes left, attributes right) {
+	attributes r;
+	if(left.type != "string" || right.type != "string") {
+		r = errorReport("Concatenação serve apenas para strings!");
+		generalError = true;
+		return r;
+	}
+	r.label = genAlias("char*");
+	r.type = "string";
+	string leftVal = "";
+	string rightVal = "";
+	if(holds_alternative<string>(left.value)) {
+		leftVal = get<string>(left.value);
+	}
+	if(holds_alternative<string>(right.value)) {
+		rightVal = get<string>(right.value);
+	}
+	r.value = leftVal + rightVal;
+	int totSize = leftVal.size() + rightVal.size() + 1;
+	r.traducao =
+		left.traducao +
+		right.traducao +
+		"\t" + r.label + " = (char*)malloc(" + to_string(totSize) + ");\n" +
+    "\tstrcpy(" + r.label + ", " + left.label + ");\n" +
+    "\tstrcat(" + r.label + ", " + right.label + ");\n";
+	;
 	return r;
 }
 
