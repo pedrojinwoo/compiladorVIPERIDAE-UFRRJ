@@ -33,6 +33,7 @@ winRun: glf
 		gcc output.c -o exec.exe && \
 		exec.exe && \
 		del /f /q output.c exec.exe && \
+		del /f /q y.tab.c y.tab.h lex.yy.c glf.exe && \
 		echo. && \
 		echo. && \
 		echo.  \
@@ -45,6 +46,7 @@ linuxRun: glf
 	gcc output.c -o exec.exe
 	./exec.exe
 	rm -f output.c exec.exe
+	rm -f y.tab.c y.tab.h lex.yy.c glf.exe;
 	echo ""
 	echo ""
 	echo ""
@@ -65,8 +67,9 @@ winExtra: glf
 		del /f /q output.c exec.exe && \
 		echo. && \
 		echo. && \
-		echo.  \
-	)
+		echo.  && \
+	) echo. && \
+	del /f /q y.tab.c y.tab.h lex.yy.c glf.exe
 endif
 
 ifndef DIR
@@ -83,10 +86,12 @@ linuxExtra: glf
 		gcc output.c -o exec.exe ; \
 		./exec.exe ; \
 		rm -f output.c exec.exe ; \
+		rm -f y.tab.c y.tab.h lex.yy.c glf.exe
 		echo "" ; \
 		echo "" ; \
 		echo "" ; \
 	done
+endif
 
 clean:
 	del /f /q y.tab.c y.tab.h lex.yy.c glf.exe

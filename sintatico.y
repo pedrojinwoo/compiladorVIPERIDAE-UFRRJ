@@ -95,6 +95,7 @@ attributes stringOrchestrator(string op, attributes left, attributes right);
 // attributes stringOrchestrator(string op, attributes iterable, int factor);
 attributes stringAssignment(attributes left, attributes right);
 attributes stringConcatenation(attributes left, attributes right);
+attributes stringRepetition(attributes left, attributes right);
 void pushScope();
 void popScope();
 attributes errorReport(string msg);
@@ -111,7 +112,7 @@ attributes breakCodeGenerator(int depth);
 %token TK_SCAN TK_PRINT
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
 %token TK_BREAK TK_ALL TK_CONTINUE
-%token TK_STRCONCAT
+%token TK_STRCONCAT TK_STRREP
 %nonassoc CAST_PREC
 
 %start S
@@ -141,7 +142,7 @@ S 							: CMDS
 										if(stringScan) {
 											codigo_gerado +=
 												"\nchar _stringBuffer[10];"
-												"\nint _stringLength(char* _str);"
+												"\nint _stringLen(char* _str);"
 												"\nvoid _keyboardCleanup();"
 												;
 										}
@@ -162,7 +163,7 @@ S 							: CMDS
 
 										if(stringScan) {
 											codigo_gerado += 
-												"\nint _stringLength(char* _str) {\n"
+												"\nint _stringLen(char* _str) {\n"
 													"\tint _len;\n"
 													"\tchar _tChar;\n"
 													"\tchar _tStrClose;\n"
@@ -843,6 +844,11 @@ STRINGACTIONS		: TK_STRCONCAT TK_LPAREN E TK_COMA E TK_RPAREN
 								{
 									$$ = stringOrchestrator("concat", $3, $5);
 								}
+								| TK_STRREP TK_LPAREN E TK_COMA E TK_RPAREN
+								{
+									$$ = stringOrchestrator("repeat", $3, $5);
+								}
+								;
 
 %%
 
@@ -943,7 +949,7 @@ attributes ScanCodeGenerator(string op, attributes right) {
 		r.traducao =
 			"\tscanf(\" %5[^\\n/]\", _stringBuffer);\n"
 			"\t_keyboardCleanup();\n"
-			"\t" + scanLength + " = _stringLength(_stringBuffer);\n"
+			"\t" + scanLength + " = _stringLen(_stringBuffer);\n"
 			"\t" + right.label + " = (char*)malloc(" + scanLength + ");\n"
 			"\tstrcpy(" + right.label + ", _stringBuffer);\n"
 		;
@@ -964,15 +970,23 @@ attributes litCodeGenerator(string type, string value)
 	bool isString = false;
 	if(type == "bool") {
 		aliasType = "int";
+		r.value = (value=="true" || value=="1");
 	} else if(type == "string") {
 		aliasType = "char*";
+		r.value = value;
 		isString = true;
-	} else {
-		aliasType = type;
+	} else if(type == "int") {
+		aliasType = "int";
+		r.value = stoi(value);
+	} else if(type == "float") {
+		aliasType = "float";
+		r.value = stof(value);
+	} else if(type == "char") {
+		aliasType = "char";
+		r.value = value[0];
 	}
 	r.label = genAlias(aliasType);
 	r.type = type;
-	r.value = value;
 	if(isString) {
 		string attValue = get<string>(r.value);
 		r.traducao = 
@@ -1236,6 +1250,9 @@ attributes stringOrchestrator(string op, attributes left, attributes right)
 	if(op == "concat") {
 		return stringConcatenation(left, right);
 	}
+	if(op == "repeat") {
+		return stringRepetition(left, right);
+	}
 	return attributes();
 }
 /*attributes stringOrchestrator(string op, attributes iterable, int factor)
@@ -1288,6 +1305,88 @@ attributes stringConcatenation(attributes left, attributes right) {
     "\tstrcat(" + r.label + ", " + right.label + ");\n";
 	;
 	return r;
+}
+attributes stringRepetition(attributes left, attributes right) {
+	attributes r;
+	if(left.type != "string" || right.type != "int") {
+		r = errorReport("Erro Semântico: Repetição serve apenas para uma string e um inteiro!");
+		generalError = true;
+		return r;
+	}
+	r.label = genAlias("char*");
+	r.type = "string";
+	bool isLiteral = false;
+	string leftVal = "";
+	int rightVal = 0;
+	if(holds_alternative<string>(left.value)) {
+		leftVal = get<string>(left.value);
+		isLiteral = true;
+	}
+	if(holds_alternative<int>(right.value)) {
+		rightVal = get<int>(right.value);
+	}
+	string repeatedVal = "";
+	for(int i=0; i<rightVal; i++) {
+		repeatedVal += leftVal;
+	}
+	r.value = repeatedVal;
+	string multiTemp;
+	string totSize2;
+  string sizeVar = genAlias("int");
+	if(!isLiteral){
+  	multiTemp = genAlias("int");
+	}
+  string totSize = genAlias("int");
+	if(!isLiteral) {
+		totSize2 = genAlias("int");
+	}
+  string zeroTemp = genAlias("int");
+  string counterVar = genAlias("int");
+  string condTemp = genAlias("int");
+  string negTemp = genAlias("int");
+  string oneTemp = genAlias("int");
+  string addTemp = genAlias("int");
+  int controlID = genLabel();
+  string startLabel = "FORSTART_" + to_string(controlID);
+  string stepLabel = "FORSTEP_" + to_string(controlID);
+  string endLabel = "FOREND_" + to_string(controlID);
+  string calculoTamanhoTraducao = "";
+  if(!isLiteral) {
+    calculoTamanhoTraducao = 
+      "\t" + sizeVar + " = _stringLen(" + left.label + ");\n" +
+      "\t" + multiTemp + " = " + sizeVar + " * " + right.label + ";\n" +
+      "\t" + totSize + " = " + multiTemp + " - " + right.label + ";\n" +
+			"\t" + totSize2 + " = " + totSize + " + 1;\n" +
+			"\t" + totSize + " = " + totSize2 + ";\n";
+		;
+  } else {
+    int staticSize = ( ( (int)leftVal.size() + 1 ) * rightVal ) - rightVal+1;
+    calculoTamanhoTraducao = 
+      "\t" + sizeVar + " = " + to_string(staticSize) + ";\n" +
+      "\t" + totSize + " = " + sizeVar + ";\n"
+		;
+  }
+  r.traducao =
+    left.traducao +
+    right.traducao +
+    calculoTamanhoTraducao +
+    "\t" + r.label + " = (char*)malloc(" + totSize + ");\n" +
+    "\t" + r.label + "[0] = '\\0';\n" +
+    "\t" + zeroTemp + " = 0;\n" +
+    "\t" + counterVar + " = " + zeroTemp + ";\n" +
+    "\t" + startLabel + ":\n" +
+    "\t" + condTemp + " = " + counterVar + " < " + right.label + ";\n" +
+    "\t" + negTemp + " = !" + condTemp + ";\n" +
+    "\tif(" + negTemp + ") goto " + endLabel + ";\n" +
+    "\tstrcat(" + r.label + ", " + left.label + ");\n" +
+    "\t" + stepLabel + ":\n" +
+    "\t" + oneTemp + " = 1;\n" +
+    "\t" + addTemp + " = " + counterVar + " + " + oneTemp + ";\n" +
+    "\t" + counterVar + " = " + addTemp + ";\n" +
+    "\tgoto " + startLabel + ";\n" +
+    "\t" + endLabel + ":\n"
+	;
+  return r;
 }
 
 

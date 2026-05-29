@@ -53,7 +53,8 @@ STRING              \"{STRCONTENT}\"
 "bool"              { return TK_TYPE_BOOL; }
 "string"            { return TK_TYPE_STRING; }
 
-"strConcat"         { return TK_STRCONCAT; }
+"stringConcat"      { return TK_STRCONCAT; }
+"stringRep"         { return TK_STRREP; }
 
 "scan"              { return TK_SCAN; }
 "print"             { return TK_PRINT; }
