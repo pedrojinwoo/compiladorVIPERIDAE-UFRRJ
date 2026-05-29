@@ -65,6 +65,7 @@ int label_qnt=0;
 int linha = 1;
 bool generalError = false;
 bool stringScan = false;
+bool stringLen = false;
 string codigo_gerado;
 map<string, string> alias_types;
 static vector<labelPair> labelStack;
@@ -92,10 +93,12 @@ attributes castCodeGenerator(string tType, attributes right);
 string implicitCast(attributes left, attributes right, string &leftLabel, string &rightLabel, string &extraTrad);
 attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes stringOrchestrator(string op, attributes left, attributes right);
+attributes stringOrchestrator(string op, attributes one);
 // attributes stringOrchestrator(string op, attributes iterable, int factor);
 attributes stringAssignment(attributes left, attributes right);
 attributes stringConcatenation(attributes left, attributes right);
 attributes stringRepetition(attributes left, attributes right);
+attributes stringLength(attributes one);
 void pushScope();
 void popScope();
 attributes errorReport(string msg);
@@ -112,7 +115,7 @@ attributes breakCodeGenerator(int depth);
 %token TK_SCAN TK_PRINT
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
 %token TK_BREAK TK_ALL TK_CONTINUE
-%token TK_STRCONCAT TK_STRREP
+%token TK_STRCONCAT TK_STRREP TK_STRLEN
 %nonassoc CAST_PREC
 
 %start S
@@ -144,7 +147,12 @@ S 							: CMDS
 												"\nchar _stringBuffer[10];"
 												"\nint _stringLen(char* _str);"
 												"\nvoid _keyboardCleanup();"
-												;
+											;
+										}
+										if(stringLen) {
+											codigo_gerado +=
+												"\nint _stringLen(char* _str);"
+											;
 										}
 
 										codigo_gerado += "\n\nint main() {\n";
@@ -213,10 +221,34 @@ S 							: CMDS
 													"\tgoto WHILESTART_1;\n"
 													"\tWHILEEND_1:\n"
 												"}"
-												;
+											;
+										}
+										if(stringLen) {
+											codigo_gerado += 
+												"\nint _stringLen(char* _str) {\n"
+													"\tint _len;\n"
+													"\tchar _tChar;\n"
+													"\tchar _tStrClose;\n"
+													"\tint _temp1;\n"
+													"\t int _tCond;\n"
+													"\n"
+													"\t_len = 0;\n"
+													"\t_tChar = _str[_len];\n"
+													"\t_tStrClose = '\\0';\n"
+													"\t_temp1 = _tChar != _tStrClose;\n"
+													"\t_tCond = _temp1;\n"
+													"\twhile(_tCond) {\n"
+													"\t\t_len++;\n"
+													"\t\t_tChar = _str[_len];\n"
+													"\t\t_temp1 = _tChar != _tStrClose;\n"
+													"\t\t_tCond = _temp1;\n"
+													"\t}\n"
+													"\t_len++;\n"
+													"\treturn _len;\n"
+												"}"
+											;
 										}
 									}
-									
 								}
 								;
 
@@ -848,6 +880,10 @@ STRINGACTIONS		: TK_STRCONCAT TK_LPAREN E TK_COMA E TK_RPAREN
 								{
 									$$ = stringOrchestrator("repeat", $3, $5);
 								}
+								| TK_STRLEN TK_LPAREN E TK_RPAREN
+								{
+									$$ = stringOrchestrator("length", $3);
+								}
 								;
 
 %%
@@ -1255,6 +1291,12 @@ attributes stringOrchestrator(string op, attributes left, attributes right)
 	}
 	return attributes();
 }
+attributes stringOrchestrator(string op, attributes one) {
+	if(op == "length") {
+		return stringLength(one);
+	}
+	return attributes();
+}
 /*attributes stringOrchestrator(string op, attributes iterable, int factor)
 {
 	return attributes();
@@ -1387,6 +1429,23 @@ attributes stringRepetition(attributes left, attributes right) {
     "\t" + endLabel + ":\n"
 	;
   return r;
+}
+attributes stringLength(attributes one) {
+	attributes r;
+	if(one.type != "string") {
+		r = errorReport("Erro Semântico: A funçao espera uma string!");
+		generalError = true;
+		return r;
+	}
+	stringLen = true;
+	r.label = genAlias("int");
+	r.type = "int";
+	r.value = (int)get<string>(one.value).size();
+	r.traducao = 
+		one.traducao +
+		"\t" + r.label + " = _stringLen(" + one.label + ");\n"
+	;
+	return r;
 }
 
 

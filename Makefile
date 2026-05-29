@@ -46,7 +46,7 @@ linuxRun: glf
 	gcc output.c -o exec.exe
 	./exec.exe
 	rm -f output.c exec.exe
-	rm -f y.tab.c y.tab.h lex.yy.c glf.exe;
+	rm -f y.tab.c y.tab.h lex.yy.c glf.exe
 	echo ""
 	echo ""
 	echo ""
@@ -80,17 +80,17 @@ FILES_TO_RUN := $(wildcard $(DIR)/*.viper)
 linuxExtra: glf
 	for f in $(FILES_TO_RUN); do \
 		echo "$$f" ; \
-		glf < $$f > output.c ; \
+		./glf < $$f > output.c ; \
 		cat output.c ; \
 		echo "" ; \
 		gcc output.c -o exec.exe ; \
 		./exec.exe ; \
 		rm -f output.c exec.exe ; \
-		rm -f y.tab.c y.tab.h lex.yy.c glf.exe
 		echo "" ; \
 		echo "" ; \
 		echo "" ; \
-	done
+	done ; \
+	rm -f y.tab.c y.tab.h lex.yy.c glf.exe
 endif
 
 clean:

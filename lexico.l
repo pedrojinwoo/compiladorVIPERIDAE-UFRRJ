@@ -55,6 +55,7 @@ STRING              \"{STRCONTENT}\"
 
 "stringConcat"      { return TK_STRCONCAT; }
 "stringRep"         { return TK_STRREP; }
+"stringLen"         { return TK_STRLEN; }
 
 "scan"              { return TK_SCAN; }
 "print"             { return TK_PRINT; }
