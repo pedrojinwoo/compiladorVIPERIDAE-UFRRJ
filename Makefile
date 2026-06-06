@@ -40,13 +40,13 @@ winRun: glf
 
 .SILENT:
 linuxRun: glf
-	glf < testeGeral.viper > output.c
+	./glf < testeGeral.viper > output.c
 	cat output.c
 	echo ""
-	gcc output.c -o exec.exe
-	./exec.exe
-	rm -f output.c exec.exe
-	rm -f y.tab.c y.tab.h lex.yy.c glf.exe
+	gcc output.c -o exec
+	./exec
+	rm -f output.c exec
+	rm -f y.tab.c y.tab.h lex.yy.c glf
 	echo ""
 	echo ""
 	echo ""
@@ -83,15 +83,12 @@ linuxExtra: glf
 		./glf < $$f > output.c ; \
 		cat output.c ; \
 		echo "" ; \
-		gcc output.c -o exec.exe ; \
-		./exec.exe ; \
-		rm -f output.c exec.exe ; \
+		gcc output.c -o exec ; \
+		./exec ; \
+		rm -f output.c exec ; \
 		echo "" ; \
 		echo "" ; \
 		echo "" ; \
 	done ; \
-	rm -f y.tab.c y.tab.h lex.yy.c glf.exe
+	rm -f y.tab.c y.tab.h lex.yy.c glf
 endif
-
-clean:
-	del /f /q y.tab.c y.tab.h lex.yy.c glf.exe

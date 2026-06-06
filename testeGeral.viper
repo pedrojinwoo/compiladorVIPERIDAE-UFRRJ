@@ -1,5 +1,0 @@
-string s;
-int i;
-s = "oi";
-i = stringLen(s);
-print(i);
