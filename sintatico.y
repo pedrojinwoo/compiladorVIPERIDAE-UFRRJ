@@ -1454,7 +1454,7 @@ attributes stringRepetition(attributes left, attributes right) {
       "\t" + totSize + " = " + sizeVar + ";\n"
 		;
   }
-	r.size = ( (int)leftVal.size() * rightVal ) - rightVal + 1;
+	r.size = ( ((int)leftVal.size()+1) * rightVal ) - rightVal;
   r.traducao =
     left.traducao +
     right.traducao +
@@ -1476,6 +1476,7 @@ attributes stringRepetition(attributes left, attributes right) {
     "\t" + endLabel + ":\n"
 	;
 	cout << "// " << r.label << " size: " << r.size << endl;
+	freeList.push_back(r.label);
   return r;
 }
 attributes stringLength(attributes one) {
