@@ -17,7 +17,8 @@ struct attributes
 	string traducao;
 	string type;
 	variant<monostate, int, float, char, bool, string> value;
-	int size;
+	vector<int> dimensions;
+	vector<string> elements;
 };
 struct symbol
 {
@@ -25,7 +26,8 @@ struct symbol
 	string alias;
 	string type;
 	variant<monostate, int, float, char, bool, string> value;
-	int size;
+	vector<int> dimensions;
+	vector<string> elements;
 };
 enum controlType {IF, WHILE, DO, FOR, SWITCH};
 struct labelPair
@@ -104,7 +106,7 @@ attributes stringConcatenation(attributes left, attributes right);
 attributes stringRepetition(attributes left, attributes right);
 attributes stringLength(attributes one);
 void pushScope();
-void popScope();
+string popScope();
 attributes errorReport(string msg);
 attributes ScanCodeGenerator(string op, attributes right);
 attributes breakCodeGenerator(int depth);
@@ -170,13 +172,7 @@ S 							: CMDS
 
 										codigo_gerado += $1.traducao;
 
-										set<string> alreadyFreed;
-										for(int i=0; i<freeList.size(); i++) {
-											if(alreadyFreed.count(freeList[i])==0) {
-												codigo_gerado += "\tfree(" + freeList[i] + ");\n";
-												alreadyFreed.insert(freeList[i]);
-											}
-										}
+										/*código freeList aqui*/
 
 										codigo_gerado += 
 											"\treturn 0;\n"
@@ -306,9 +302,10 @@ CMD							: DECLARATION
 								}
 								;
 
-BLOCK						: TK_LBRACE {pushScope();} CMDS TK_RBRACE {popScope();}
+BLOCK						: TK_LBRACE {pushScope();} CMDS TK_RBRACE
 								{
-									$$.traducao = $3.traducao;
+									string freeCode = popScope();
+									$$.traducao = $3.traducao + freeCode;
 								}
 
 BREAK						: TK_BREAK TK_SEMICOLON
@@ -398,13 +395,11 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E
 											if(s->type == $3.type) {
 												if($3.type == "string") {
 													attributes temp = stringOrchestrator("=", $1, $3);
-													s->size = temp.size;
 													$$.traducao =
 														$3.traducao +
 														temp.traducao
 													;
 												} else {
-													s->size = 1;
 													$$.traducao =
 														$3.traducao +
 														"\t" + s->alias + " = " + $3.label + ";\n"
@@ -941,7 +936,6 @@ attributes errorReport(string msg) {
 	r.type = "error";
 	r.traducao = "";
 	r.value = monostate();
-	r.size = 0;
 	generalError = true;
 	return r;
 }
@@ -953,12 +947,10 @@ attributes IDVerifier(string name)
 		r.label = s->alias;
 		r.type = s->type;
 		r.value = s->value;
-		r.size = s->size;
 		r.traducao = "";
 	} else {
 		r = errorReport("Erro Semantico: Variavel '" + name + "' nao declarada!");
 	}
-	cout << "// " << r.label << " size: " << r.size << endl;
 	return r;
 }
 void varDeclaration(string name, string type)
@@ -969,18 +961,15 @@ void varDeclaration(string name, string type)
 		return;
 	} else {
 		string aliasType;
-		int size=1;
 		if(type == "bool") {
 			aliasType = "int";
 		} else if(type == "string") {
 			aliasType = "char*";
-			size = 0;
 		} else {
 			aliasType = type;
 		}
 		string t = genAlias(aliasType);
-		cout << "// " << name << " size: " << size << endl;
-		current_scope->table[name] = {name, t, type, monostate(), size};
+		current_scope->table[name] = {name, t, type, monostate()};
 	}
 }
 
@@ -1004,7 +993,6 @@ attributes ScanCodeGenerator(string op, attributes right) {
 	} else if (right.type == "string")  {
 		stringScan = true;
 		string scanLength = genAlias("int");
-		r.size = -1;
 		r.traducao =
 			"\tscanf(\" %5[^\\n/]\", _stringBuffer);\n"
 			"\t_keyboardCleanup();\n"
@@ -1015,7 +1003,6 @@ attributes ScanCodeGenerator(string op, attributes right) {
 	} else {
 		r = errorReport("Erro Semantico: Tipo não suportado!");
 	}
-	cout << "// " << r.label << " size: " << r.size << endl;
 	return r;
 
 }
@@ -1047,10 +1034,8 @@ attributes litCodeGenerator(string type, string value)
 	}
 	r.label = genAlias(aliasType);
 	r.type = type;
-	r.size = 1;
 	if(isString) {
 		string attValue = get<string>(r.value);
-		r.size = attValue.size();
 		r.traducao = 
 			"\t" + r.label + " = (char*)malloc(" + to_string(attValue.size() + 1) + ");\n" +
 			"\tstrcpy(" + r.label + ", \"" + value + "\");\n"
@@ -1061,7 +1046,6 @@ attributes litCodeGenerator(string type, string value)
 	} else{
 		r.traducao = "\t" + r.label + " = " + value + ";\n";
 	}
-	cout << "// " << r.label << " size: " << r.size << endl;
 	return r;
 }
 
@@ -1132,7 +1116,6 @@ attributes complexStringCodeGenerator(attributes left, attributes right)
     }
     r.value = arg_left + arg_right;
     freeList.push_back(r.label);
-		cout << "// "<< r.label << " size: " << r.size << endl;
     return r;
 }
 attributes commonOpCodeGenerator(string op, attributes left, attributes right, string opType)
@@ -1149,14 +1132,12 @@ attributes commonOpCodeGenerator(string op, attributes left, attributes right, s
 	r.label = genAlias(finalType);
 	r.type = finalType;
 	r.value = finalType;
-	r.size = 1;
 	r.traducao =
 		left.traducao + 
 		right.traducao + 
 		extraTrad + 
 		"\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n"
 	;
-	cout << "// "<< r.label << " size: " << r.size << endl;
 	return r;
 }
 
@@ -1173,12 +1154,10 @@ attributes unopCodeGenerator(string op, attributes right)
     }
     r.label = genAlias("int");
     r.type = "bool";
-		r.size = 1;
     r.traducao = 
 			right.traducao + 
 			"\t" + r.label + " = " + op + right.label + ";\n"
 		;
-		cout << "// "<< r.label << " size: " << r.size << endl;
     return r;
 }
 attributes logicRelCodeGenerator(string op, attributes left, attributes right)
@@ -1197,13 +1176,11 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right)
 		}
 		r.label = genAlias("int");
 		r.type = "bool";
-		r.size = 1;
 		r.traducao = 
 			left.traducao + 
 			right.traducao + 
 			"\t" + r.label + " = " + left.label + " " + op + " " + right.label + ";\n"
 		;
-		cout << "// " << r.label << " size: " << r.size << endl;
 		return r;
 	}
 	r.label = genAlias("int"); 
@@ -1217,14 +1194,12 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right)
 		generalError = true;
 		return r;
 	}
-	r.size = 1;
 	r.traducao = 
 		left.traducao + 
 		right.traducao + 
 		extraTrad + 
 		"\t" + r.label + " = " + leftLabel + " " + op + " " + rightLabel + ";\n"
 	;
-	cout << "// "<< r.label << " size: " << r.size << endl;
 	return r;
 }
 
@@ -1277,12 +1252,10 @@ attributes castCodeGenerator(string tType, attributes right)
 	r.label = genAlias(aliasType);
 	r.type = tType;
 	r.value = tType;
-	r.size = 1;
 	r.traducao = 
 		right.traducao + 
 		"\t" + r.label + " = (" + tType + ") " + right.label + ";\n"
 	;
-	cout << "// " << r.label << " size: " << r.size << endl;
 	return r;
 }
 string implicitCast(attributes left, attributes right, string &leftLabel, string &rightLabel, string &extraTrad) {
@@ -1348,7 +1321,6 @@ attributes stringAssignment(attributes left, attributes right)
 	r.label = sym->alias;
 	r.type = "string";
 	r.value = right.value;
-	r.size = get<string>(right.value).size();
 	string tradFree = "";
 	if(holds_alternative<string>(sym->value) && !get<string>(sym->value).empty()) {
 		tradFree = "\tfree(" + sym->alias + ");\n";
@@ -1360,7 +1332,6 @@ attributes stringAssignment(attributes left, attributes right)
 		"\tstrcpy(" + sym->alias + ", " + right.label + ");\n"
 	;
 	freeList.push_back(sym->alias);
-	cout << "// " << r.label << " size: " << r.size << endl;
 	return r;
 }
 attributes stringConcatenation(attributes left, attributes right) {
@@ -1382,7 +1353,6 @@ attributes stringConcatenation(attributes left, attributes right) {
 	}
 	r.value = leftVal + rightVal;
 	int totSize = leftVal.size() + rightVal.size() + 1;
-	r.size = totSize-1;
 	r.traducao =
 		left.traducao +
 		right.traducao +
@@ -1390,7 +1360,6 @@ attributes stringConcatenation(attributes left, attributes right) {
     "\tstrcpy(" + r.label + ", " + left.label + ");\n" +
     "\tstrcat(" + r.label + ", " + right.label + ");\n";
 	;
-	cout << "// " << r.label << " size: " << r.size << endl;
 	freeList.push_back(r.label);
 	return r;
 }
@@ -1454,7 +1423,6 @@ attributes stringRepetition(attributes left, attributes right) {
       "\t" + totSize + " = " + sizeVar + ";\n"
 		;
   }
-	r.size = ( ((int)leftVal.size()+1) * rightVal ) - rightVal;
   r.traducao =
     left.traducao +
     right.traducao +
@@ -1475,7 +1443,6 @@ attributes stringRepetition(attributes left, attributes right) {
     "\tgoto " + startLabel + ";\n" +
     "\t" + endLabel + ":\n"
 	;
-	cout << "// " << r.label << " size: " << r.size << endl;
 	freeList.push_back(r.label);
   return r;
 }
@@ -1504,11 +1471,24 @@ void pushScope()
 {
 	current_scope = new Scope(current_scope);
 }
-void popScope()
+string popScope()
 {
-	Scope*old = new Scope(current_scope);
+	string freeCode = "";
+	for(auto& [name, sym] : current_scope->table) {
+        bool needsFree = (sym.type == "string") ||
+                         (!sym.dimensions.empty() && sym.dimensions[0] > 0);
+        if(needsFree) {
+            if(sym.dimensions.size() == 2) { // matriz
+                for(int i = 0; i < sym.dimensions[0]; i++)
+                    freeCode += "\tfree(" + sym.alias + "[" + to_string(i) + "]);\n";
+            }
+            freeCode += "\tfree(" + sym.alias + ");\n";
+        }
+    }
+	Scope*old = current_scope;
 	current_scope = current_scope->parent;
 	delete old;
+	return freeCode;
 }
 
 

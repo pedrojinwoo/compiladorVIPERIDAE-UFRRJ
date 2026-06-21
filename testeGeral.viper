@@ -1,6 +1,15 @@
-string s;
-s = "oi";
-1 + 2 * 3;
-s = stringConcat(s, "oi");
-s = stringRep(s, 2);
-print(s);
+{
+  int i;
+  i = 0;
+  while(i<5) {
+    i=i+1;
+    string s;
+    s = "oi";
+    print(s);
+  }
+}
+{
+  string s;
+  s = "oi";
+  print(s);
+}
