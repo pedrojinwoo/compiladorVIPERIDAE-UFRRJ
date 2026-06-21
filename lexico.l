@@ -42,7 +42,10 @@ STRING              \"{STRCONTENT}\"
 "&&"                { return TK_AND; }
 "||"                { return TK_OR; }
 
+"neg"               { return TK_NEG; }
 "!"                 { return TK_NOT; }
+"++"                { return TK_INC; }
+"--"                { return TK_DEC; }
 
 "+="                { return TK_PASS; }
 "-="                { return TK_MASS; }

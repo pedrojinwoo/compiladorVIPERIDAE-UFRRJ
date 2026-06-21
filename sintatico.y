@@ -92,7 +92,10 @@ void varDeclaration(string name, string type);
 attributes opCodeGeneratorOrchestrator(string op, attributes left, attributes right);
 attributes complexStringCodeGenerator(attributes left, attributes right);
 attributes commonOpCodeGenerator(string op, attributes left, attributes right, string opType);
-attributes unopCodeGenerator(string op, attributes right);
+attributes unNotCodeGenerator(attributes one);
+attributes unNegCodeGenerator(attributes one);
+attributes unPostfixCodeGenerator(string op, attributes left);
+attributes unPrefixCodeGenerator(string op, attributes right);
 attributes litCodeGenerator(string type, string value);
 attributes IDVerifier(string name);
 attributes castCodeGenerator(string tType, attributes right);
@@ -119,7 +122,8 @@ attributes breakCodeGenerator(int depth);
 %token TK_LPAREN TK_RPAREN TK_LBRACE TK_RBRACE
 %token TK_ASSIGN TK_EQ TK_NEQ TK_LT TK_GT TK_LEQ TK_GEQ
 %token TK_PASS TK_MASS TK_MUASS TK_DASS
-%token TK_AND TK_OR TK_NOT
+%token TK_MINUS TK_NOT TK_INC TK_DEC
+%token TK_AND TK_OR
 %token TK_SCAN TK_PRINT
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
 %token TK_BREAK TK_ALL TK_CONTINUE
@@ -128,19 +132,20 @@ attributes breakCodeGenerator(int depth);
 
 %start S
 
-%right TK_ASSIGN
-%left TK_AND TK_OR
+%right TK_ASSIGN TK_PASS TK_MASS TK_MUASS TK_DASS
+%left TK_OR TK_AND
 %left TK_EQ TK_NEQ 
 %left TK_LT TK_GT TK_LEQ TK_GEQ
+%left TK_STRCONCAT TK_STRREP
 %left '+' '-'
 %left '*' '/'
-%right TK_NOT
+%right TK_NOT TK_NEG TK_INC TK_DEC
 
 %%
 
 S 							: CMDS
 								{
-									if(!generalError)
+									//if(!generalError)
 									{
 										codigo_gerado = 
 											"\n"
@@ -485,7 +490,7 @@ CONTROL					: IF BLOCK ELIF ELSE
 									}
 									string startLabel = "DOWHILESTART_" + $1.label;
 									string endLabel = "DOWHILEEND_" + $1.label;
-									attributes negOperand = unopCodeGenerator("!", $5);
+									attributes negOperand = unNotCodeGenerator($5);
 									$$.traducao =
 										$1.traducao +
 										$2.traducao +
@@ -508,7 +513,7 @@ CONTROL					: IF BLOCK ELIF ELSE
 									string startLabel = "FORSTART_" + $1.label;
 									string stepLabel = "FORSTEP_" + $1.label;
 									string endLabel = "FOREND_" + $1.label;
-									attributes negOperand = unopCodeGenerator("!", $5);
+									attributes negOperand = unNotCodeGenerator($5);
 									$$.traducao =
 										$3.traducao +
 										"\t" + startLabel + ":\n" +
@@ -559,7 +564,7 @@ IF 							: TK_IF TK_LPAREN E TK_RPAREN
 										errorReport("Erro Semantico: Condição de 'if' deve ser do tipo booleano!");
 										generalError = true;
 									}
-									attributes negOperand = unopCodeGenerator("!", $3);
+									attributes negOperand = unNotCodeGenerator($3);
 									int controlID = genLabel();
 									labelPair lp;
 										lp.startLabel = "";
@@ -586,7 +591,7 @@ ELIFELEMENT			: TK_ELIF TK_LPAREN E TK_RPAREN BLOCK
 										errorReport("Erro Semantico: Condição de 'elif' deve ser do tipo booleano!");
 										generalError = true;
 									}
-									attributes negOperand = unopCodeGenerator("!", $3);
+									attributes negOperand = unNotCodeGenerator($3);
 									string refId = labelStack.back().falseLabel.substr(7);
 									string genEndLabel = labelStack.back().endLabel;
 									string elifLabel = "ELIF" + refId + "_" + to_string(elifCounter++);
@@ -623,7 +628,7 @@ WHILE						: TK_WHILE TK_LPAREN E TK_RPAREN
 										lp.type = WHILE;
 									labelStack.push_back(lp);
 									loopEndStack.push(lp.endLabel);
-									attributes negOperand = unopCodeGenerator("!", $3);
+									attributes negOperand = unNotCodeGenerator($3);
 									$$.label = to_string(controlID);
 									$$.traducao =
 										"\t" + lp.startLabel + ":\n" +
@@ -739,10 +744,6 @@ LOGICAL					: LOGICAL TK_AND RELATIONAL
 								{
 									$$ = logicRelCodeGenerator("||", $1, $3);
 								}
-								| TK_NOT LOGICAL
-								{
-									$$ = unopCodeGenerator("!", $2);
-								}
 								| RELATIONAL
 								{
 									$$ = $1;
@@ -777,21 +778,55 @@ RELATIONAL			: RELATIONAL TK_EQ ARITHMETICAL
 									$$ = $1;
 								}
 								;
-ARITHMETICAL		: ARITHMETICAL '+' CAST
+ARITHMETICAL		: ARITHMETICAL '+' UNARY
 								{
 									$$ = opCodeGeneratorOrchestrator("+", $1, $3);
 								}
-								|	ARITHMETICAL '-' CAST
+								|	ARITHMETICAL '-' UNARY
 								{
 									$$ = opCodeGeneratorOrchestrator("-", $1, $3);
 								}
-								| ARITHMETICAL '*' CAST
+								| ARITHMETICAL '*' UNARY
 								{
 									$$ = opCodeGeneratorOrchestrator("*", $1, $3);
 								}
-								| ARITHMETICAL '/' CAST
+								| ARITHMETICAL '/' UNARY
 								{
 									$$ = opCodeGeneratorOrchestrator("/", $1, $3);
+								}
+								| UNARY
+								{
+									$$ = $1;
+								}
+								;
+UNARY 					: TK_NEG TK_LPAREN CAST TK_RPAREN
+								{
+									$$ = unNegCodeGenerator($3);
+								}
+								| TK_NOT CAST
+								{
+									$$ = unNotCodeGenerator($2);
+								}
+								| TK_INC CAST
+								{
+									$$ = unPrefixCodeGenerator("++", $2);
+								}
+								| TK_DEC CAST
+								{
+									$$ = unPrefixCodeGenerator("--", $2);
+								}
+								| POSTFIX
+								{
+									$$ = $1;
+								}
+								;
+POSTFIX 				: CAST TK_INC
+								{
+									$$ = unPostfixCodeGenerator("++", $1);
+								}
+								| CAST TK_DEC
+								{
+									$$ = unPostfixCodeGenerator("--", $1);
 								}
 								| CAST
 								{
@@ -1161,23 +1196,104 @@ attributes commonOpCodeGenerator(string op, attributes left, attributes right, s
 
 
 
-// OPERAÇÕES LÓGICAS E RELACIONAIS
-attributes unopCodeGenerator(string op, attributes right)
+// OPERAÇÕES UNÁRIAS
+attributes unNotCodeGenerator(attributes one)
+{
+attributes r;
+	if(one.type != "bool") {
+		r = errorReport("Erro Semântico: Operador lógico '!' exige tipo booleano!");
+		generalError = true;
+		return r;
+	}
+	r.label = genAlias("int");
+	r.type = "bool";
+	r.traducao = 
+		one.traducao + 
+		"\t" + r.label + " = !" + one.label + ";\n"
+	;
+	return r;
+}
+attributes unNegCodeGenerator(attributes one)
 {
 	attributes r;
-    if(right.type != "bool") {
-			r = errorReport("Erro Semântico: Operador lógico '!' exige tipo booleano!");
-			generalError = true;
-			return r;
-    }
-    r.label = genAlias("int");
-    r.type = "bool";
-    r.traducao = 
-			right.traducao + 
-			"\t" + r.label + " = " + op + right.label + ";\n"
-		;
-    return r;
+	if(one.type == "error") return one;
+	if(one.type != "int" && one.type != "float") {
+		return errorReport("Erro Semântico: Tipo incompatível para operador unário");
+	}
+	string cType = (one.type == "float") ? "float" : "int";
+	r.label    = genAlias(cType);
+	r.type     = one.type;
+	r.dimensions     = {};
+	r.traducao = one.traducao +
+		"\t" + r.label + " = -" + one.label + ";\n"
+	;
+  return r;
 }
+attributes unPrefixCodeGenerator(string op, attributes right)
+{
+	if(right.type == "error") return right;
+	if(right.type != "int" && right.type != "float") {
+		return errorReport("Erro Semântico: " + op + " aplicável apenas a int e float!");
+	}
+	string cType  = (right.type == "float") ? "float" : "int";
+	string oneAlias = genAlias(cType);
+	string oneCode  = "\t" + oneAlias + " = 1;\n";
+	attributes one; one.label = oneAlias; one.type = right.type; one.traducao = "";
+	string basicOp  = (op == "++") ? "+" : "-";
+	attributes result = opCodeGeneratorOrchestrator(basicOp, right, one);
+	attributes r;
+	r.type     = right.type;
+	r.dimensions     = {};
+	r.label    = right.label;
+	r.traducao = 
+		right.traducao +
+		oneCode +
+		result.traducao +
+		"\t" + right.label + " = " + result.label + ";\n"
+	;
+	return r;
+}
+attributes unPostfixCodeGenerator(string op, attributes left)
+{
+	if(left.type == "error") return left;
+	if(left.type != "int" && left.type != "float") {
+			return errorReport("Erro Semântico: " + op + " aplicável apenas a int e float!");
+	}
+	string cType;
+	if (left.type == "float") {
+		cType = "float";
+	} else {
+		cType = "int";
+	}
+	string oldAlias = genAlias(cType);
+	string saveCode = "\t" + oldAlias + " = " + left.label + ";\n";
+	string oneAlias = genAlias(cType);
+	string oneCode  = "\t" + oneAlias + " = 1;\n";
+	attributes one; one.label = oneAlias; one.type = left.type; one.traducao = "";
+	string basicOp;
+	if (op == "++") {
+		basicOp = "+";
+	} else {
+		basicOp = "-";
+	}
+	attributes result = opCodeGeneratorOrchestrator(basicOp, left, one);
+	attributes r;
+	r.type     = left.type;
+	r.dimensions     = {};
+	r.label    = oldAlias;
+	r.traducao =
+		left.traducao +
+		saveCode +
+		oneCode +
+		result.traducao +
+		"\t" + left.label + " = " + result.label + ";\n"
+	;
+	return r;
+}
+
+
+
+// OPERAÇÕES LÓGICAS E RELACIONAIS
 attributes logicRelCodeGenerator(string op, attributes left, attributes right)
 {
 	attributes r;
