@@ -105,6 +105,7 @@ attributes stringAssignment(attributes left, attributes right);
 attributes stringConcatenation(attributes left, attributes right);
 attributes stringRepetition(attributes left, attributes right);
 attributes stringLength(attributes one);
+attributes compoundCodeGenerator(string op, attributes left, attributes right);
 void pushScope();
 string popScope();
 attributes errorReport(string msg);
@@ -117,6 +118,7 @@ attributes breakCodeGenerator(int depth);
 %token TK_TYPE_INT TK_TYPE_FLOAT TK_TYPE_CHAR TK_TYPE_BOOL TK_TYPE_STRING
 %token TK_LPAREN TK_RPAREN TK_LBRACE TK_RBRACE
 %token TK_ASSIGN TK_EQ TK_NEQ TK_LT TK_GT TK_LEQ TK_GEQ
+%token TK_PASS TK_MASS TK_MUASS TK_DASS
 %token TK_AND TK_OR TK_NOT
 %token TK_SCAN TK_PRINT
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
@@ -414,6 +416,22 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E
 											generalError = true;
 										}
 									}
+								}
+								| TK_ID TK_PASS LITERAL
+								{
+									$$ = compoundCodeGenerator("+=", $1, $3);
+								}
+								| TK_ID TK_MASS LITERAL
+								{
+									$$ = compoundCodeGenerator("-=", $1, $3);
+								}
+								| TK_ID TK_MUASS LITERAL
+								{
+									$$ = compoundCodeGenerator("*=", $1, $3);
+								}
+								| TK_ID TK_DASS LITERAL
+								{
+									$$ = compoundCodeGenerator("/=", $1, $3);
 								}
 								;
 ASSIGNCMD				: ASSIGNMENT TK_SEMICOLON
@@ -1460,6 +1478,51 @@ attributes stringLength(attributes one) {
 	r.traducao = 
 		one.traducao +
 		"\t" + r.label + " = _stringLen(" + one.label + ");\n"
+	;
+	return r;
+}
+
+
+
+// OPERAÇÕES COMPOSTAS
+attributes compoundCodeGenerator(string op, attributes left, attributes right)
+{
+	attributes r;
+	r.type = left.type;
+	r.label = left.label;
+	r.dimensions = left.dimensions;
+	attributes rLeft = IDVerifier(left.label);
+	if(rLeft.type == "error" || right.type == "error" || rLeft.type == "string" || right.type == "string" || rLeft.type == "char" || right.type == "char" || rLeft.type == "bool" || right.type == "bool") {
+		r = errorReport("Erro Semântico: Tipo não suportado para operação composta");
+		generalError = true;
+		return r;
+	} else {
+		if(rLeft.type != right.type) {
+			r = errorReport("Erro Semântico: Tipos incompatíveis para operação composta");
+			generalError = true;
+			return r;
+		}
+	}
+	string basicOp = op.substr(0, op.size() - 1);
+	if (holds_alternative<int>(left.value) && holds_alternative<int>(right.value)) {
+		int valLeft = get<int>(left.value);
+		int valRight = get<int>(right.value);
+		if (basicOp == "+") r.value = valLeft + valRight;
+		else if (basicOp == "-") r.value = valLeft - valRight;
+		else if (basicOp == "*") r.value = valLeft * valRight;
+		else if (basicOp == "/") { if(valRight != 0) r.value = valLeft / valRight; }
+  } else if (holds_alternative<float>(left.value) && holds_alternative<float>(right.value)) {
+		float valLeft = get<float>(left.value);
+		float valRight = get<float>(right.value);
+		if (basicOp == "+") r.value = valLeft + valRight;
+		else if (basicOp == "-") r.value = valLeft - valRight;
+		else if (basicOp == "*") r.value = valLeft * valRight;
+		else if (basicOp == "/") { if(valRight != 0.0f) r.value = valLeft / valRight; }
+  }
+	r.traducao =
+		left.traducao +
+		right.traducao +
+		"\t" + rLeft.label + " = " + rLeft.label + " " + basicOp + " " + right.label + ";\n"
 	;
 	return r;
 }

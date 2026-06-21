@@ -38,9 +38,16 @@ STRING              \"{STRCONTENT}\"
 ">"                 { return TK_GT; }
 "<="                { return TK_LEQ; }
 ">="                { return TK_GEQ; }
+
 "&&"                { return TK_AND; }
 "||"                { return TK_OR; }
+
 "!"                 { return TK_NOT; }
+
+"+="                { return TK_PASS; }
+"-="                { return TK_MASS; }
+"*="                { return TK_MUASS; }
+"/="                { return TK_DASS; }
 
 ";"                 { return TK_SEMICOLON; }
 ":"                 { return TK_COLON; }
