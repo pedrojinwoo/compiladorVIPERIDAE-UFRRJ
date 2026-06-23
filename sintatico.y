@@ -17,7 +17,7 @@ struct attributes
 	string traducao;
 	string type;
 	variant<monostate, int, float, char, bool, string> value;
-	vector<int> dimensions;
+	vector<attributes> dimensions;
 	vector<string> elements;
 };
 struct symbol
@@ -26,7 +26,7 @@ struct symbol
 	string alias;
 	string type;
 	variant<monostate, int, float, char, bool, string> value;
-	vector<int> dimensions;
+	vector<attributes> dimensions;
 	vector<string> elements;
 };
 enum controlType {IF, WHILE, DO, FOR, SWITCH};
@@ -91,7 +91,8 @@ attributes errorReport(string msg);
 attributes breakCodeGenerator(int depth);
 string resultType(string t1, string t2);
 attributes compoundCodeGenerator(string op, attributes left, attributes right);
-void varDeclaration(string name, string type);
+void commonVarDeclaration(string name, string type);
+void complexVarDeclaration(string name, string type, attributes rows, optional<attributes> columns=nullopt);
 attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes opCodeGeneratorOrchestrator(string op, attributes left, attributes right);
 attributes complexStringCodeGenerator(attributes left, attributes right);
@@ -101,7 +102,7 @@ attributes unNegCodeGenerator(attributes one);
 attributes unPostfixCodeGenerator(string op, attributes left);
 attributes unPrefixCodeGenerator(string op, attributes right);
 attributes commonLitCodeGenerator(string type, string value);
-attributes complexLitCodeGenerator(string name, attributes rows, optional<attributes> columns=nullopt);
+attributes complexLitCodeGenerator(string name, attributes rows, optional<attributes>columns=nullopt);
 attributes commonLitCodeGenerator(string type, string value);
 attributes IDVerifier(string name);
 attributes ScanCodeGenerator(string op, attributes right);
@@ -366,29 +367,94 @@ CONTINUE				: TK_CONTINUE TK_SEMICOLON
 								}
 									;
 
-DECLARATION			: TK_TYPE_INT TK_ID TK_SEMICOLON
+DECLARATION						: COMMONDECLARATION
 								{
-									varDeclaration($2.label, "int");
+									$$ = $1;
+								}
+								| VECTORDECLARATION
+								{
+									$$ = $1;
+								}
+								| MATRIXDECLARATION
+								{
+									$$ = $1;
+								}
+								;
+COMMONDECLARATION				: TK_TYPE_INT TK_ID TK_SEMICOLON
+								{
+									commonVarDeclaration($2.label, "int");
 									$$.traducao = "";
 								}
 								| TK_TYPE_FLOAT TK_ID TK_SEMICOLON
 								{
-									varDeclaration($2.label, "float");
+									commonVarDeclaration($2.label, "float");
 									$$.traducao = "";
 								}
 								| TK_TYPE_CHAR TK_ID TK_SEMICOLON
 								{
-									varDeclaration($2.label, "char");
+									commonVarDeclaration($2.label, "char");
 									$$.traducao = "";
 								}
 								| TK_TYPE_BOOL TK_ID TK_SEMICOLON
 								{
-									varDeclaration($2.label, "bool");
+									commonVarDeclaration($2.label, "bool");
 									$$.traducao = "";
 								}
 								| TK_TYPE_STRING TK_ID TK_SEMICOLON
 								{
-									varDeclaration($2.label, "string");
+									commonVarDeclaration($2.label, "string");
+									$$.traducao = "";
+								}
+								;
+VECTORDECLARATION				: TK_TYPE_INT TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "int", $4);
+									$$.traducao = "";
+								}
+								| TK_TYPE_FLOAT TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "float", $4);
+									$$.traducao = "";
+								}
+								| TK_TYPE_CHAR TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "char", $4);
+									$$.traducao = "";
+								}
+								| TK_TYPE_BOOL TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "bool", $4);
+									$$.traducao = "";
+								}
+								| TK_TYPE_STRING TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "string", $4);
+									$$.traducao = "";
+								}
+								;
+MATRIXDECLARATION				: TK_TYPE_INT TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "int", $4, $7);
+									$$.traducao = "";
+								}
+								| TK_TYPE_FLOAT TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "float", $4, $7);
+									$$.traducao = "";
+								}
+								| TK_TYPE_CHAR TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "char", $4, $7);
+									$$.traducao = "";
+								}
+								| TK_TYPE_BOOL TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "bool", $4, $7);
+									$$.traducao = "";
+								}
+								| TK_TYPE_STRING TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								{
+									complexVarDeclaration($2.label, "string", $4, $7);
 									$$.traducao = "";
 								}
 								;
@@ -1047,10 +1113,14 @@ attributes IDVerifier(string name)
 	}
 	return r;
 }
-void varDeclaration(string name, string type)
+
+
+
+// DECLARAÇÃO DE VARIÁVEIS
+void commonVarDeclaration(string name, string type)
 {
 	if(current_scope->table.count(name)) {
-		yyerror("Erro Sintatico: Variavel '" + name + " ja declarada!");
+		yyerror("Erro Sintatico: Variavel '" + name + "' ja declarada!");
 		generalError = true;
 		return;
 	} else {
@@ -1063,8 +1133,36 @@ void varDeclaration(string name, string type)
 			aliasType = type;
 		}
 		string t = genAlias(aliasType);
-		current_scope->table[name] = {name, t, type, monostate()};
+		vector<attributes> dims = {};
+		current_scope->table[name] = {name, t, type, monostate(), dims};
 	}
+}
+void complexVarDeclaration(string name, string type, attributes rows, optional<attributes> columns)
+{
+	/*
+	if(current_scope->table.count(name)) {
+		yyerror("Erro Sintático: Variável '" + name + "' já declarada!");
+		generalError = true;
+		return;
+	} else {
+		string aliasType;
+		if(type == "bool") {
+			aliasType = "int";
+		} else if(type == "string") {
+			aliasType = "char*";
+		} else {
+			aliasType = type;
+		}
+		string t = genAlias(aliasType);
+		vector<attributes> dims;
+		dims.push_back(rows);
+		if(columns.has_value()) {
+			dims.push_back(columns.value());
+		}
+		current_scope->table[name] = {name, t, type, monostate(), dims};
+	}
+*/
+	yyerror("Criação de variáveis complexas inicialmente feito!");
 }
 
 
@@ -1128,13 +1226,14 @@ attributes commonLitCodeGenerator(string type, string value)
 	}
 	r.label = genAlias(aliasType);
 	r.type = type;
+	r.dimensions = {};
 	if(isString) {
 		string attValue = get<string>(r.value);
 		r.traducao = 
 			"\t" + r.label + " = (char*)malloc(" + to_string(attValue.size() + 1) + ");\n" +
 			"\tstrcpy(" + r.label + ", \"" + value + "\");\n"
 		;
-		freeList.push_back(r.label);
+		//freeList.push_back(r.label);
 	} else if(type == "char") {
 		r.traducao = "\t" + r.label + " = \'" + value + "\';\n";
 	} else{
@@ -1145,6 +1244,7 @@ attributes commonLitCodeGenerator(string type, string value)
 /*
 attributes complexLitCodeGenerator(string name, attributes rows, optional<attributes> columns=nullopt)
 {
+	attributes r;
 
 }
 */
@@ -1701,11 +1801,16 @@ string popScope()
 {
 	string freeCode = "";
 	for(auto& [name, sym] : current_scope->table) {
-        bool needsFree = (sym.type == "string") ||
-                         (!sym.dimensions.empty() && sym.dimensions[0] > 0);
+		bool dimZero = false;
+		if(!sym.dimensions.empty()) {
+			if(holds_alternative<int>(sym.dimensions[0].value)) {
+				dimZero = get<int>(sym.dimensions[0].value) > 0;
+			}
+		}
+        bool needsFree = (sym.type == "string") || dimZero;
         if(needsFree) {
-            if(sym.dimensions.size() == 2) { // matriz
-                for(int i = 0; i < sym.dimensions[0]; i++)
+            if(sym.dimensions.size() == 2) {
+                for(int i = 0; i < get<int>(sym.dimensions[0].value); i++)
                     freeCode += "\tfree(" + sym.alias + "[" + to_string(i) + "]);\n";
             }
             freeCode += "\tfree(" + sym.alias + ");\n";
