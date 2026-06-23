@@ -5,7 +5,7 @@
 #include <map>
 #include <vector>
 #include <stack>
-#include <set>
+#include <optional>
 
 #define YYSTYPE attributes
 
@@ -87,8 +87,12 @@ void yyerror(string);
 // Construtores de funções
 string genAlias(string type);
 int genLabel();
+attributes errorReport(string msg);
+attributes breakCodeGenerator(int depth);
 string resultType(string t1, string t2);
+attributes compoundCodeGenerator(string op, attributes left, attributes right);
 void varDeclaration(string name, string type);
+attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes opCodeGeneratorOrchestrator(string op, attributes left, attributes right);
 attributes complexStringCodeGenerator(attributes left, attributes right);
 attributes commonOpCodeGenerator(string op, attributes left, attributes right, string opType);
@@ -96,11 +100,13 @@ attributes unNotCodeGenerator(attributes one);
 attributes unNegCodeGenerator(attributes one);
 attributes unPostfixCodeGenerator(string op, attributes left);
 attributes unPrefixCodeGenerator(string op, attributes right);
-attributes litCodeGenerator(string type, string value);
+attributes commonLitCodeGenerator(string type, string value);
+attributes complexLitCodeGenerator(string name, attributes rows, optional<attributes> columns=nullopt);
+attributes commonLitCodeGenerator(string type, string value);
 attributes IDVerifier(string name);
+attributes ScanCodeGenerator(string op, attributes right);
 attributes castCodeGenerator(string tType, attributes right);
 string implicitCast(attributes left, attributes right, string &leftLabel, string &rightLabel, string &extraTrad);
-attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes stringOrchestrator(string op, attributes left, attributes right);
 attributes stringOrchestrator(string op, attributes one);
 // attributes stringOrchestrator(string op, attributes iterable, int factor);
@@ -108,21 +114,17 @@ attributes stringAssignment(attributes left, attributes right);
 attributes stringConcatenation(attributes left, attributes right);
 attributes stringRepetition(attributes left, attributes right);
 attributes stringLength(attributes one);
-attributes compoundCodeGenerator(string op, attributes left, attributes right);
 void pushScope();
 string popScope();
-attributes errorReport(string msg);
-attributes ScanCodeGenerator(string op, attributes right);
-attributes breakCodeGenerator(int depth);
 %}
 
 %token TK_SEMICOLON TK_COLON TK_COMA
 %token TK_ID TK_NUM_INT TK_NUM_FLOAT TK_CHAR TK_BOOL TK_STRING
 %token TK_TYPE_INT TK_TYPE_FLOAT TK_TYPE_CHAR TK_TYPE_BOOL TK_TYPE_STRING
-%token TK_LPAREN TK_RPAREN TK_LBRACE TK_RBRACE
+%token TK_LPAREN TK_RPAREN TK_LBRACKET TK_RBRACKET TK_LBRACE TK_RBRACE
 %token TK_ASSIGN TK_EQ TK_NEQ TK_LT TK_GT TK_LEQ TK_GEQ
 %token TK_PASS TK_MASS TK_MUASS TK_DASS
-%token TK_MINUS TK_NOT TK_INC TK_DEC
+%token TK_NEG TK_NOT TK_INC TK_DEC
 %token TK_AND TK_OR
 %token TK_SCAN TK_PRINT
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
@@ -500,7 +502,7 @@ CONTROL					: IF BLOCK ELIF ELSE
 										"\t" + endLabel + ":\n"
 									;
 								}
-								| FOR TK_LPAREN ASSIGNMENT TK_SEMICOLON LOGICAL TK_SEMICOLON  ASSIGNMENT TK_RPAREN BLOCK
+								| FOR TK_LPAREN ASSIGNMENT TK_SEMICOLON LOGICAL TK_SEMICOLON  ITERATOR TK_RPAREN BLOCK
 								{
 									if($3.traducao == "" || $5.traducao == "" || $7.traducao == "") {
 										errorReport("Erro Semantico: Expressão inválida no controle 'for'!");
@@ -807,18 +809,11 @@ UNARY 					: TK_NEG TK_LPAREN CAST TK_RPAREN
 								{
 									$$ = unNotCodeGenerator($2);
 								}
-								| TK_INC CAST
-								{
-									$$ = unPrefixCodeGenerator("++", $2);
-								}
-								| TK_DEC CAST
-								{
-									$$ = unPrefixCodeGenerator("--", $2);
-								}
 								| POSTFIX
 								{
 									$$ = $1;
 								}
+
 								;
 POSTFIX 				: CAST TK_INC
 								{
@@ -828,6 +823,19 @@ POSTFIX 				: CAST TK_INC
 								{
 									$$ = unPostfixCodeGenerator("--", $1);
 								}
+								| PREFIX
+								{
+									$$ = $1;
+								}
+								;
+PREFIX							: TK_INC CAST
+								{
+									$$ = unPrefixCodeGenerator("++", $2);
+								}
+								| TK_DEC CAST
+								{
+									$$ = unPrefixCodeGenerator("--", $2);
+								} 
 								| CAST
 								{
 									$$ = $1;
@@ -879,27 +887,40 @@ BASE						:	LITERAL
 								;
 LITERAL					: TK_NUM_INT
 								{
-									$$ = litCodeGenerator("int", $1.label);
+									$$ = commonLitCodeGenerator("int", $1.label);
 								}
 								| TK_NUM_FLOAT
 								{
-									$$ = litCodeGenerator("float", $1.label);
+									$$ = commonLitCodeGenerator("float", $1.label);
 								}
 								| TK_CHAR
 								{
-									$$ = litCodeGenerator("char", $1.label);
+									$$ = commonLitCodeGenerator("char", $1.label);
 								}
 								| TK_BOOL
 								{
-									$$ = litCodeGenerator("bool", $1.label);
+									$$ = commonLitCodeGenerator("bool", $1.label);
 								}
 								| TK_STRING
 								{
-									$$ = litCodeGenerator("string", $1.label);
+									$$ = commonLitCodeGenerator("string", $1.label);
 								}
 								| TK_ID
 								{
 									$$ = IDVerifier($1.label);
+								}
+								| COMPLEXLITERAL
+								{
+									$$ = $1;
+								}
+								;
+COMPLEXLITERAL					: TK_ID TK_LBRACKET E TK_RBRACKET
+								{
+									//$$ = complexLitCodeGenerator($1.label, $3);
+								}
+								| TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET
+								{
+									//$$ = complexLitCodeGenerator($1.label, $3, $6);
 								}
 								;
 IO							: TK_SCAN TK_LPAREN TK_ID TK_RPAREN
@@ -947,6 +968,26 @@ STRINGACTIONS		: TK_STRCONCAT TK_LPAREN E TK_COMA E TK_RPAREN
 								| TK_STRLEN TK_LPAREN E TK_RPAREN
 								{
 									$$ = stringOrchestrator("length", $3);
+								}
+								;
+/*
+LITS							: LITERAL
+								{
+									$$ = $1;
+								}
+								| COMPLEXLITERAL
+								{
+									$$ = $1;
+								}
+								;
+*/
+ITERATOR						: ASSIGNMENT
+								{
+									$$ = $1;
+								}
+								| POSTFIX
+								{
+									$$ = $1;
 								}
 								;
 
@@ -1063,7 +1104,7 @@ attributes ScanCodeGenerator(string op, attributes right) {
 
 
 // CRIAÇÃO DE LITERAIS
-attributes litCodeGenerator(string type, string value)
+attributes commonLitCodeGenerator(string type, string value)
 {
 	attributes r;
 	string aliasType;
@@ -1101,6 +1142,12 @@ attributes litCodeGenerator(string type, string value)
 	}
 	return r;
 }
+/*
+attributes complexLitCodeGenerator(string name, attributes rows, optional<attributes> columns=nullopt)
+{
+
+}
+*/
 
 
 
