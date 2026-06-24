@@ -192,9 +192,9 @@ S 							: CMDS
 											"#include <string.h>\n"
 										;
 
-										codigo_gerado += "\n\n// TEMPORARIOS GLOBAIS";
+										codigo_gerado += "\n\n// TEMPORARIOS GLOBAIS\n";
 										if(stringScan) {
-											codigo_gerado += "\nchar _stringBuffer[10];";
+											codigo_gerado += "char _stringBuffer[10];";
 										}
 										for(int i=1; i<=var_temp_qnt; i++) {
 											string t = "_t" + to_string(i);
@@ -232,7 +232,7 @@ S 							: CMDS
 												"\nint _stringLen(char* _str);"
 											;
 										}
-										codigo_gerado += "\n\n" + prototype_codes;
+										codigo_gerado += "\n" + prototype_codes;
 										
 
 										codigo_gerado += "\n\nint main() {";
@@ -1367,6 +1367,7 @@ attributes IDVerifier(string name)
 		r.label = s->alias;
 		r.type = s->type;
 		r.value = s->value;
+		r.dimensions = s->dimensions;
 		r.traducao = "";
 	} else {
 		r = errorReport("Erro Semantico: Variavel '" + name + "' nao declarada!");

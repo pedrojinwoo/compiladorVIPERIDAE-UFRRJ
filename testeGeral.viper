@@ -13,6 +13,3 @@ x = double(x);
 print(x);
 x = triple(x);
 print(x);
-
-string s;
-scan(s);
