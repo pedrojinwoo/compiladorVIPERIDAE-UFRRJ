@@ -66,6 +66,12 @@ struct aliasMetadata
 	tempCategory category = COMMON;
 	vector<attributes>dimensions={};
 };
+struct funcSigs
+{
+	string name;
+	string returnType;
+	vector<string> paramTypes;
+};
 
 // CLASSE PARA ESCOPO
 class Scope
@@ -86,6 +92,10 @@ class Scope
 };
 
 // VARIÁVEIS, MAPAS E FUNÇÕES/CALLS GLOBAIS
+string prototype_codes= "";
+string functions_codes= "";
+string funcReturnTypeAuth = "";
+vector<string> globalParamTypes;
 int var_temp_qnt;
 int label_qnt=0;
 int linha = 1;
@@ -101,6 +111,7 @@ stack<int> switchIdStack;
 vector<string> freeList;
 int caseCounter = 0;
 int elifCounter = 0;
+map<string, funcSigs> function_table;
 Scope*current_scope = new Scope(nullptr);
 int yylex(void);
 void yyerror(string);
@@ -153,6 +164,7 @@ string popScope();
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
 %token TK_BREAK TK_ALL TK_CONTINUE
 %token TK_STRCONCAT TK_STRREP TK_STRLEN
+%token TK_RETURN
 %nonassoc CAST_PREC
 
 %start S
@@ -178,7 +190,7 @@ S 							: CMDS
 											"#include <stdio.h>\n"
 											"#include <stdlib.h>\n"
 											"#include <string.h>\n"
-											;
+										;
 
 										if(stringScan) {
 											codigo_gerado +=
@@ -192,7 +204,33 @@ S 							: CMDS
 												"\nint _stringLen(char* _str);"
 											;
 										}
+									
+									codigo_gerado += "\n// VARIÁVEIS GLOBAIS E TEMPORÁRIOS\n";
+										for(int i=1; i<=var_temp_qnt; i++) {
+											string t = "_t" + to_string(i);
+											aliasMetadata meta = alias_vars[t];
+											switch(meta.category) {
+												case COMMON:
+													codigo_gerado += "\t" + meta.type + " " + t + ";\n";
+													break;
+												case STATICVECTOR:
+													codigo_gerado += "\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value)) + "];\n";
+													break;
+												case STATICMATRIX:
+													codigo_gerado += 
+														"\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value) * get<int>(meta.dimensions[1].value)) + "];\n"
+													;
+													break;
+												case DYNAMICVECTOR:
+													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
+													break;
+												case DYNAMICMATRIX:
+													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
+													break;
+											}
+										}
 
+									/*
 										codigo_gerado += "\n\nint main() {\n";
 
 										for(int i=1; i<=var_temp_qnt; i++) {
@@ -218,6 +256,14 @@ S 							: CMDS
 													break;
 											}
 										}
+									*/
+
+										codigo_gerado += 
+											"\n// === PROTÓTIPOS DAS FUNÇÕES ===\n" +
+											prototype_codes + "\n"
+										;
+
+										codigo_gerado += "\n\nint main() {\n";
 
 										codigo_gerado += "\n";
 
@@ -228,6 +274,11 @@ S 							: CMDS
 										codigo_gerado += 
 											"\treturn 0;\n"
 											"}\n"
+										;
+
+										codigo_gerado +=
+											"\n// === DEFINIÇÕES DAS FUNÇÕES ===\n" +
+											functions_codes + "\n"
 										;
 
 										if(stringScan) {
@@ -350,6 +401,84 @@ CMD							: DECLARATION
 								| CONTINUE
 								{
 									$$.traducao = $1.traducao;
+								}
+								| FUNC
+								{
+									$$.traducao = "";
+								}
+								| TK_RETURN E TK_SEMICOLON
+								{
+									if(funcReturnTypeAuth == "") {
+										errorReport("Erro Semântico: Return só pode ser usado dentro de funções!");
+									}
+									if($2.type != funcReturnTypeAuth) {
+										errorReport("Erro Semântico: O item no return deve ter tipo igual ao que vai receber o retorno!");
+									}
+									$$.traducao =
+										$2.traducao +
+										"\treturn " + $2.label + ";\n";
+									;
+								}
+								;
+
+FUNC						: TK_ID TK_LPAREN { pushScope(); globalParamTypes.clear(); } PARAMS TK_RPAREN TK_COLON TYPE { funcReturnTypeAuth=$7.label; } TK_LBRACE CMDS TK_RBRACE
+								{
+									funcSigs func;
+									func.name = $1.label;
+									func.returnType = $7.label;
+									func.paramTypes = globalParamTypes;
+									function_table[$1.label] = func;
+									string freeCode = popScope();
+									prototype_codes += $7.label +	" " + $1.label + "(" + $4.label + ");\n";
+									functions_codes +=
+										$7.label +	" " + $1.label + "(" + $4.label + ") {\n" +
+										$10.traducao + freeCode +
+										"}\n\n"
+									;
+									funcReturnTypeAuth = "";
+									$$.traducao = "";
+								}
+								;
+TYPE						: TK_TYPE_INT
+								{
+									$$.label = "int";
+								}
+								| TK_TYPE_FLOAT
+								{
+									$$.label = "float";
+								}
+								| TK_TYPE_CHAR
+								{
+									$$.label = "char";
+								}
+								| TK_TYPE_BOOL
+								{
+									$$.label = "int";
+								}
+								| TK_TYPE_STRING
+								{
+									$$.label = "char*";
+								}
+								;
+PARAMS					: PARAM TK_COMA PARAMS
+								{
+									$$.label = $1.label + ", " + $3.label;
+								}
+								| PARAM
+								{
+									$$.label = $1.label;
+								}
+								|
+								{
+									$$.	label = "";
+								}
+								;
+PARAM						: TYPE TK_ID
+								{
+									commonVarDeclaration($2.label, $1.label);
+									symbol*s = current_scope->lookup($2.label);
+									$$.label = $1.label + " " + s->alias;
+									globalParamTypes.push_back($1.label);
 								}
 								;
 
@@ -1057,6 +1186,24 @@ BASE						:	LITERAL
 								{
 									$$ = $1;
 								}
+								| TK_ID TK_LPAREN ARGS TK_RPAREN
+								{
+									if(function_table.count($1.label)==0) {
+										errorReport("Erro Semântico: Função " + $1.label + " não declarada!");
+									} else {
+										funcSigs func = function_table[$1.label];
+										if(func.paramTypes.size() != $3.elements.size()) {
+											errorReport("Erro Semântico: Número incorrento de argumentos para a função'" + $1.label + "'");
+										}
+										string temp = genAlias(func.returnType);
+										$$.label = temp;
+										$$.type = func.returnType;
+										$$.traducao = 
+											$3.traducao +
+											"\t" + temp + " = " + $1.label + "(" + $3.label + ");\n";
+										;
+									}
+								}
 								;
 LITERAL					: TK_NUM_INT
 								{
@@ -1166,6 +1313,28 @@ DIMITEM					: TK_NUM_INT
 										generalError = true;
 									}
 									$$ = idAttr;
+								}
+								;
+ARGS						: E TK_COMA ARGS
+								{
+									$$.label = $1.label + ", " + $3.label;
+									$$.elements = $3.elements;
+									$$.elements.insert($$.elements.begin(), $1);
+									$$.traducao =
+										$1.traducao +
+										$3.traducao
+									;
+								}
+								| E
+								{
+									$$.label = $1.label;
+									$$.elements.push_back($1);
+									$$.traducao = $1.traducao;
+								}
+								|
+								{
+									$$.label = "";
+									$$.traducao = "";
 								}
 
 %%

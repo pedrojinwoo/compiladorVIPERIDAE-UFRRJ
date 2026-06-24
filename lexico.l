@@ -85,6 +85,8 @@ STRING              \"{STRCONTENT}\"
 "case"              { return TK_CASE; }
 "default"           { return TK_DEFAULT; }
 
+"return"            { return TK_RETURN; }
+
 "EOF"               { yylval.label = "-1"; return TK_NUM_INT; }
 "true"              { yylval.label = "1"; return TK_BOOL; }
 "false"             { yylval.label = "0"; return TK_BOOL; }
