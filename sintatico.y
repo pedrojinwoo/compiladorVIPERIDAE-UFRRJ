@@ -34,7 +34,7 @@ struct attributes
 	string type;
 	variant<monostate, int, float, char, bool, string> value;
 	vector<attributes> dimensions;
-	vector<string> elements;
+	vector<attributes> elements;
 };
 struct symbol
 {
@@ -43,7 +43,7 @@ struct symbol
 	string type;
 	variant<monostate, int, float, char, bool, string> value;
 	vector<attributes> dimensions;
-	vector<string> elements;
+	vector<attributes> elements;
 };
 struct labelPair
 {
@@ -112,6 +112,7 @@ attributes errorReport(string msg);
 attributes breakCodeGenerator(int depth);
 string resultType(string t1, string t2);
 attributes compoundCodeGenerator(string op, attributes left, attributes right);
+attributes arrayAssignmentCodeGenerator(string id, attributes literal);
 void commonVarDeclaration(string name, string type);
 void complexVarDeclaration(string name, string type, attributes rows, optional<attributes> columns=nullopt);
 string dynMatrixVectorCodeGenerator(string name);
@@ -207,7 +208,7 @@ S 							: CMDS
 													break;
 												case STATICMATRIX:
 													codigo_gerado += 
-														"\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value)) + "][" + to_string(get<int>(meta.dimensions[1].value)) + "];\n"
+														"\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value) * get<int>(meta.dimensions[1].value)) + "];\n"
 													;
 													break;
 												case DYNAMICVECTOR:
@@ -506,32 +507,44 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E
 										errorReport("Erro Semantico: Variavel '" + $1.label + "' nao declarada!");
 										generalError = true;
 									} else {
-										if($3.type != "error") {
+										if($3.type == "arrayLiteral") {
 											symbol* s = current_scope->lookup($1.label);
-											if(s->type == $3.type) {
-												if($3.type == "string") {
-													attributes temp = stringOrchestrator("=", $1, $3);
-													s->value = temp.value;
-													$$.value = temp.value;
-													$$.traducao =
-														$3.traducao +
-														temp.traducao
-													;
+											attributes temp = arrayAssignmentCodeGenerator($1.label, $3);
+											$$.elements = $3.elements;
+											s->elements = $3.elements;
+											$$.traducao =	temp.traducao;
+											/*yyerror("Elemento 1: " + to_string(get<int>(s->elements[0].value)));
+											yyerror("Elemento 2: " + to_string(get<int>(s->elements[1].value)));
+											yyerror("Elemento 1: " + to_string(get<int>(s->elements[0].value)));
+											yyerror("Elemento 2: " + to_string(get<int>(s->elements[1].value)));*/
+										} else {
+											if($3.type != "error") {
+												symbol* s = current_scope->lookup($1.label);
+												if(s->type == $3.type) {
+													if($3.type == "string") {
+														attributes temp = stringOrchestrator("=", $1, $3);
+														s->value = temp.value;
+														$$.value = temp.value;
+														$$.traducao =
+															$3.traducao +
+															temp.traducao
+														;
+													} else {
+														s->value = $3.value;
+														$$.value = $3.value;
+														$$.traducao =
+															$3.traducao +
+															"\t" + s->alias + " = " + $3.label + ";\n"
+														;
+													}
 												} else {
-													s->value = $3.value;
-													$$.value = $3.value;
-													$$.traducao =
-														$3.traducao +
-														"\t" + s->alias + " = " + $3.label + ";\n"
-													;
+													errorReport("Erro Semantico: Tipos incompativeis! '" + $1.label + "' e " + s->type + " mas recebeu " + $3.type);
+													generalError = true;
 												}
 											} else {
-												errorReport("Erro Semantico: Tipos incompativeis! '" + $1.label + "' e " + s->type + " mas recebeu " + $3.type);
+												$$.traducao = $3.traducao;
 												generalError = true;
 											}
-										} else {
-											$$.traducao = $3.traducao;
-											generalError = true;
 										}
 									}
 								}
@@ -945,7 +958,7 @@ POSTFIX 				: CAST TK_INC
 									$$.value = $1.value;
 								}
 								;
-PREFIX							: TK_INC CAST
+PREFIX					: TK_INC CAST
 								{
 									$$ = unPrefixCodeGenerator("++", $2);
 								}
@@ -979,10 +992,35 @@ CAST						: TK_LPAREN TK_TYPE_INT TK_RPAREN BASE %prec CAST_PREC
 								{
 									$$ = castCodeGenerator("string", $4);
 								}
+								//| BASE
+								| VECLIT
+								{
+									$$ = $1;
+									$$.value = $1.value;
+								}
+								;
+VECLIT					: TK_LBRACKET VECITEMS TK_RBRACKET
+								{
+									$$ = $2;
+									$$.type = "arrayLiteral";
+								}
 								| BASE
 								{
 									$$ = $1;
 									$$.value = $1.value;
+								}
+								;
+VECITEMS				: VECLIT
+								{
+									$$.elements.clear();
+									$$.elements.push_back($1);
+									$$.traducao = $1.traducao;
+								}
+								| VECITEMS TK_COMA VECLIT
+								{
+									$$ = $1;
+									$$.elements.push_back($3);
+									$$.traducao = $1.traducao + $3.traducao;
 								}
 								;
 BASE						:	LITERAL
@@ -1883,6 +1921,43 @@ attributes compoundCodeGenerator(string op, attributes left, attributes right)
 		right.traducao +
 		"\t" + rLeft.label + " = " + rLeft.label + " " + basicOp + " " + right.label + ";\n"
 	;
+	return r;
+}
+
+
+
+// ATRIBUIÇÃO DE LITERAIS COMPLEXOS A ARRAYS
+attributes arrayAssignmentCodeGenerator(string id, attributes literal) {
+	attributes r;
+	symbol*s = current_scope->lookup(id);
+	if(s->dimensions.size() == 1) {
+		if(get<int>(s->dimensions[0].value) != literal.elements.size()) {
+			errorReport("Erro Semântico: O tamanho do literal a ser atribuído ao array " + id + " é diferente do tamanho do próprio array!");
+			generalError = true;
+		}
+		r.traducao = literal.traducao;
+		for(int i=0; i<literal.elements.size(); i++) {
+			r.traducao += "\t" + s->alias + "[" + to_string(i) + "] = " + literal.elements[i].label + ";\n";
+		}
+	} else if(s->dimensions.size() == 2) {
+		if(get<int>(s->dimensions[0].value) != literal.elements.size()) {
+			errorReport("Erro Semântico: A quantidade de linhas do literal a ser atribuído ao array " + id + " é diferente da matriz!");
+			generalError = true;
+		}
+		for(int i=0; i<literal.elements.size(); i++) {
+			if(get<int>(s->dimensions[1].value) != literal.elements[i].elements.size()) {
+				errorReport("Erro Semântico: A quantidade de colunas do literal a ser atribuído ao array " + id + "é diferente da matriz!");
+				generalError = true;
+			}
+		}
+		r.traducao = literal.traducao;
+		for(int i=0; i<literal.elements.size(); i++) {
+			for(int j=0; j<literal.elements[i].elements.size(); j++) {
+				string index = "(" + to_string(i) + " * " + s->dimensions[1].label + ") + " + to_string(j);
+				r.traducao += "\t" + s->alias + "[" + index + "] = " + literal.elements[i].elements[j].label + ";\n";
+			}
+		}
+	}
 	return r;
 }
 
