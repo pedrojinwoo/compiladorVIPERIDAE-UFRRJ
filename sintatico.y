@@ -124,9 +124,8 @@ attributes unNotCodeGenerator(attributes one);
 attributes unNegCodeGenerator(attributes one);
 attributes unPostfixCodeGenerator(string op, attributes left);
 attributes unPrefixCodeGenerator(string op, attributes right);
-attributes commonLitCodeGenerator(string type, string value);
-attributes complexLitCodeGenerator(string name, attributes rows, optional<attributes>columns=nullopt);
-attributes commonLitCodeGenerator(string type, string value);
+attributes litCodeGenerator(string type, string value);
+attributes arrayCodeGenerator(string name, attributes rows, optional<attributes> columns=nullopt);
 attributes IDVerifier(string name);
 attributes ScanCodeGenerator(string op, attributes right);
 attributes castCodeGenerator(string tType, attributes right);
@@ -514,8 +513,6 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E
 											s->elements = $3.elements;
 											$$.traducao =	temp.traducao;
 											/*yyerror("Elemento 1: " + to_string(get<int>(s->elements[0].value)));
-											yyerror("Elemento 2: " + to_string(get<int>(s->elements[1].value)));
-											yyerror("Elemento 1: " + to_string(get<int>(s->elements[0].value)));
 											yyerror("Elemento 2: " + to_string(get<int>(s->elements[1].value)));*/
 										} else {
 											if($3.type != "error") {
@@ -563,6 +560,18 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E
 								| TK_ID TK_DASS LITERAL
 								{
 									$$ = compoundCodeGenerator("/=", $1, $3);
+								}
+								| ARRAY TK_ASSIGN E
+								{
+									if($1.type != $3.type) {
+										errorReport("Erro Semântico: Tipos incompatíveis! '" + $1.label + "' é " + $1.type + " mas recebeu " + $3.type + "!");
+										generalError = true;
+									}
+									$$.traducao =
+										$1.traducao +
+										$3.traducao +
+										"\t" + $1.label + " = " + $3.label + ";\n";
+									;
 								}
 								;
 ASSIGNCMD				: ASSIGNMENT TK_SEMICOLON
@@ -1028,6 +1037,10 @@ BASE						:	LITERAL
 									$$ = $1;
 									$$.value = $1.value;
 								}
+								| ARRAY
+								{
+									$$ = $1;
+								}
 								| IO
 								{
 									$$ = $1;
@@ -1047,40 +1060,36 @@ BASE						:	LITERAL
 								;
 LITERAL					: TK_NUM_INT
 								{
-									$$ = commonLitCodeGenerator("int", $1.label);
+									$$ = litCodeGenerator("int", $1.label);
 								}
 								| TK_NUM_FLOAT
 								{
-									$$ = commonLitCodeGenerator("float", $1.label);
+									$$ = litCodeGenerator("float", $1.label);
 								}
 								| TK_CHAR
 								{
-									$$ = commonLitCodeGenerator("char", $1.label);
+									$$ = litCodeGenerator("char", $1.label);
 								}
 								| TK_BOOL
 								{
-									$$ = commonLitCodeGenerator("bool", $1.label);
+									$$ = litCodeGenerator("bool", $1.label);
 								}
 								| TK_STRING
 								{
-									$$ = commonLitCodeGenerator("string", $1.label);
+									$$ = litCodeGenerator("string", $1.label);
 								}
 								| TK_ID
 								{
 									$$ = IDVerifier($1.label);
 								}
-								| COMPLEXLITERAL
-								{
-									$$ = $1;
-								}
 								;
-COMPLEXLITERAL	: TK_ID TK_LBRACKET E TK_RBRACKET
+ARRAY						: TK_ID TK_LBRACKET E TK_RBRACKET
 								{
-									//$$ = complexLitCodeGenerator($1.label, $3);
+									$$ = arrayCodeGenerator($1.label, $3);
 								}
 								| TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET
 								{
-									//$$ = complexLitCodeGenerator($1.label, $3, $6);
+									$$ = arrayCodeGenerator($1.label, $3, $6);
 								}
 								;
 IO							: TK_SCAN TK_LPAREN TK_ID TK_RPAREN
@@ -1340,7 +1349,7 @@ attributes ScanCodeGenerator(string op, attributes right) {
 
 
 // CRIAÇÃO DE LITERAIS
-attributes commonLitCodeGenerator(string type, string value)
+attributes litCodeGenerator(string type, string value)
 {
 	attributes r;
 	string aliasType;
@@ -1374,13 +1383,42 @@ attributes commonLitCodeGenerator(string type, string value)
 	}
 	return r;
 }
-/*
-attributes complexLitCodeGenerator(string name, attributes rows, optional<attributes> columns=nullopt)
+attributes arrayCodeGenerator(string name, attributes rows, optional<attributes> columns)
 {
 	attributes r;
-
+	symbol*s = current_scope->lookup(name);
+	if(!s) {
+		return errorReport("Erro Semântico: Variável " + name + " não foi declarada!");
+	}
+	if(s->dimensions.empty()) {
+		return errorReport("Erro Semântico: Variável " + name + " não é um vetor ou matriz!");
+	}
+	r.type = s->type;
+	if(!columns.has_value()) {
+		if(s->dimensions.size() != 1) {
+			return errorReport("Erro Semântico: Tentativa de acessar a matriz " + name + " com apenas 1 índice!");
+		}
+		if(rows.type!="int") {
+			return errorReport("Erro Semântico: O índice do vetor deve ser do tipo int!");
+		}
+		r.label = s->alias + "[" + rows.label + "]";
+		r.traducao = rows.traducao;
+	} else {
+		if(s->dimensions.size() != 2) {
+			return errorReport("Erro Semântico: Tentativa de acessar o vetor " + name + " com 2 índices!");
+		}
+		if(rows.type!="int" || columns.value().type!="int") {
+			return errorReport("Erro Semântico: Os índices da matriz devem ser to tipo int!");
+		}
+		string index = "(" + rows.label + " * " + s->dimensions[1].label + ") + " + columns.value().label;
+		r.label = s->alias + "[" + index + "]";
+		r.traducao =
+			rows.traducao +
+			columns.value().traducao
+		;
+	}
+	return r;
 }
-*/
 
 
 
