@@ -4,7 +4,7 @@ x = 10;
 func double(int x) : int {
   return (x * 2);
 }
-func triple(int x) : int {
+func triple(int x) : int{
   return (x * 3);
 }
 

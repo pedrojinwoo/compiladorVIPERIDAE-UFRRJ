@@ -1436,7 +1436,7 @@ string dynMatrixVectorCodeGenerator(string name) {
     }
     else if (cat == DYNAMICMATRIX) {
 			string part0 = genAlias("int");
-			string part1 = "\t" + part0 + " = " + s->dimensions[0].label + " + " + s->dimensions[1].label + ";\n";
+			string part1 = "\t" + part0 + " = " + s->dimensions[0].label + " * " + s->dimensions[1].label + ";\n";
       t =
 				part1 +
 				"\t" + s->alias + " = (" + s->type + "*)malloc(" + part0 + " * sizeof(" + s->type + "));\n"
