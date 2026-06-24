@@ -11,6 +11,22 @@
 
 using namespace std;
 
+enum controlType
+{
+	IF,
+	WHILE,
+	DO,
+	FOR,
+	SWITCH
+};
+enum tempCategory
+{
+	COMMON,
+	STATICVECTOR,
+	STATICMATRIX,
+	DYNAMICVECTOR,
+	DYNAMICMATRIX
+};
 struct attributes
 {
 	string label;
@@ -29,7 +45,6 @@ struct symbol
 	vector<attributes> dimensions;
 	vector<string> elements;
 };
-enum controlType {IF, WHILE, DO, FOR, SWITCH};
 struct labelPair
 {
 	string startLabel;
@@ -44,6 +59,12 @@ struct switchCase
 	string label;
 	string traducao;
 	int refSwitch;
+};
+struct aliasMetadata
+{
+	string type;
+	tempCategory category = COMMON;
+	vector<attributes>dimensions={};
 };
 
 // CLASSE PARA ESCOPO
@@ -72,7 +93,7 @@ bool generalError = false;
 bool stringScan = false;
 bool stringLen = false;
 string codigo_gerado;
-map<string, string> alias_types;
+map<string, aliasMetadata> alias_vars;
 static vector<labelPair> labelStack;
 stack<string> loopEndStack;
 vector<switchCase> switchCasesList;
@@ -85,7 +106,7 @@ int yylex(void);
 void yyerror(string);
 
 // Construtores de funções
-string genAlias(string type);
+string genAlias(string type, tempCategory category=COMMON, vector<attributes> dimensions={});
 int genLabel();
 attributes errorReport(string msg);
 attributes breakCodeGenerator(int depth);
@@ -93,6 +114,7 @@ string resultType(string t1, string t2);
 attributes compoundCodeGenerator(string op, attributes left, attributes right);
 void commonVarDeclaration(string name, string type);
 void complexVarDeclaration(string name, string type, attributes rows, optional<attributes> columns=nullopt);
+string dynMatrixVectorCodeGenerator(string name);
 attributes logicRelCodeGenerator(string op, attributes left, attributes right);
 attributes opCodeGeneratorOrchestrator(string op, attributes left, attributes right);
 attributes complexStringCodeGenerator(attributes left, attributes right);
@@ -148,7 +170,7 @@ string popScope();
 
 S 							: CMDS
 								{
-									//if(!generalError)
+									if(!generalError)
 									{
 										codigo_gerado = 
 											"\n"
@@ -175,7 +197,26 @@ S 							: CMDS
 
 										for(int i=1; i<=var_temp_qnt; i++) {
 											string t = "_t" + to_string(i);
-											codigo_gerado += "\t" + alias_types[t] + " " + t + ";\n";
+											aliasMetadata meta = alias_vars[t];
+											switch(meta.category) {
+												case COMMON:
+													codigo_gerado += "\t" + meta.type + " " + t + ";\n";
+													break;
+												case STATICVECTOR:
+													codigo_gerado += "\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value)) + "];\n";
+													break;
+												case STATICMATRIX:
+													codigo_gerado += 
+														"\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value)) + "][" + to_string(get<int>(meta.dimensions[1].value)) + "];\n"
+													;
+													break;
+												case DYNAMICVECTOR:
+													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
+													break;
+												case DYNAMICMATRIX:
+													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
+													break;
+											}
 										}
 
 										codigo_gerado += "\n";
@@ -367,20 +408,20 @@ CONTINUE				: TK_CONTINUE TK_SEMICOLON
 								}
 									;
 
-DECLARATION						: COMMONDECLARATION
+DECLARATION			: CDECLARATION
 								{
 									$$ = $1;
 								}
-								| VECTORDECLARATION
+								| VDECLARATION
 								{
 									$$ = $1;
 								}
-								| MATRIXDECLARATION
+								| MDECLARATION
 								{
 									$$ = $1;
 								}
 								;
-COMMONDECLARATION				: TK_TYPE_INT TK_ID TK_SEMICOLON
+CDECLARATION		: TK_TYPE_INT TK_ID TK_SEMICOLON
 								{
 									commonVarDeclaration($2.label, "int");
 									$$.traducao = "";
@@ -406,56 +447,56 @@ COMMONDECLARATION				: TK_TYPE_INT TK_ID TK_SEMICOLON
 									$$.traducao = "";
 								}
 								;
-VECTORDECLARATION				: TK_TYPE_INT TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+VDECLARATION		: TK_TYPE_INT TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "int", $4);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_FLOAT TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_FLOAT TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "float", $4);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_CHAR TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_CHAR TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "char", $4);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_BOOL TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_BOOL TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "bool", $4);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_STRING TK_ID TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_STRING TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "string", $4);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
 								;
-MATRIXDECLARATION				: TK_TYPE_INT TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+MDECLARATION		: TK_TYPE_INT TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "int", $4, $7);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_FLOAT TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_FLOAT TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "float", $4, $7);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_CHAR TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_CHAR TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "char", $4, $7);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_BOOL TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_BOOL TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "bool", $4, $7);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
-								| TK_TYPE_STRING TK_ID TK_LBRACKET E TK_RBRACKET TK_LBRACKET E TK_RBRACKET TK_SEMICOLON
+								| TK_TYPE_STRING TK_ID TK_LBRACKET DIMITEM TK_RBRACKET TK_LBRACKET DIMITEM TK_RBRACKET TK_SEMICOLON
 								{
 									complexVarDeclaration($2.label, "string", $4, $7);
-									$$.traducao = "";
+									$$.traducao = dynMatrixVectorCodeGenerator($2.label);
 								}
 								;
 
@@ -470,11 +511,15 @@ ASSIGNMENT			: TK_ID TK_ASSIGN E
 											if(s->type == $3.type) {
 												if($3.type == "string") {
 													attributes temp = stringOrchestrator("=", $1, $3);
+													s->value = temp.value;
+													$$.value = temp.value;
 													$$.traducao =
 														$3.traducao +
 														temp.traducao
 													;
 												} else {
+													s->value = $3.value;
+													$$.value = $3.value;
 													$$.traducao =
 														$3.traducao +
 														"\t" + s->alias + " = " + $3.label + ";\n"
@@ -568,7 +613,7 @@ CONTROL					: IF BLOCK ELIF ELSE
 										"\t" + endLabel + ":\n"
 									;
 								}
-								| FOR TK_LPAREN ASSIGNMENT TK_SEMICOLON LOGICAL TK_SEMICOLON  ITERATOR TK_RPAREN BLOCK
+								| FOR TK_LPAREN ASSIGNMENT TK_SEMICOLON LOGICAL TK_SEMICOLON ITERATOR TK_RPAREN BLOCK
 								{
 									if($3.traducao == "" || $5.traducao == "" || $7.traducao == "") {
 										errorReport("Erro Semantico: Expressão inválida no controle 'for'!");
@@ -802,6 +847,7 @@ CASEELEMENT		  : TK_CASE LITERAL TK_COLON CMDS
 E								: LOGICAL
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								;
 LOGICAL					: LOGICAL TK_AND RELATIONAL
@@ -815,6 +861,7 @@ LOGICAL					: LOGICAL TK_AND RELATIONAL
 								| RELATIONAL
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								;
 RELATIONAL			: RELATIONAL TK_EQ ARITHMETICAL
@@ -844,6 +891,7 @@ RELATIONAL			: RELATIONAL TK_EQ ARITHMETICAL
 								| ARITHMETICAL
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								;
 ARITHMETICAL		: ARITHMETICAL '+' UNARY
@@ -865,6 +913,7 @@ ARITHMETICAL		: ARITHMETICAL '+' UNARY
 								| UNARY
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								;
 UNARY 					: TK_NEG TK_LPAREN CAST TK_RPAREN
@@ -878,6 +927,7 @@ UNARY 					: TK_NEG TK_LPAREN CAST TK_RPAREN
 								| POSTFIX
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 
 								;
@@ -892,6 +942,7 @@ POSTFIX 				: CAST TK_INC
 								| PREFIX
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								;
 PREFIX							: TK_INC CAST
@@ -905,6 +956,7 @@ PREFIX							: TK_INC CAST
 								| CAST
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								;
 CAST						: TK_LPAREN TK_TYPE_INT TK_RPAREN BASE %prec CAST_PREC
@@ -930,20 +982,24 @@ CAST						: TK_LPAREN TK_TYPE_INT TK_RPAREN BASE %prec CAST_PREC
 								| BASE
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								;
 BASE						:	LITERAL
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								| IO
 								{
 									$$ = $1;
+									$$.value = $1.value;
 								}
 								| TK_LPAREN E TK_RPAREN
 								{
 									$$.label = $2.label;
 									$$.traducao = $2.traducao;
+									$$.value = $2.value;
 									$$.type = $2.type;
 								}
 								| STRINGACTIONS
@@ -980,7 +1036,7 @@ LITERAL					: TK_NUM_INT
 									$$ = $1;
 								}
 								;
-COMPLEXLITERAL					: TK_ID TK_LBRACKET E TK_RBRACKET
+COMPLEXLITERAL	: TK_ID TK_LBRACKET E TK_RBRACKET
 								{
 									//$$ = complexLitCodeGenerator($1.label, $3);
 								}
@@ -1037,7 +1093,7 @@ STRINGACTIONS		: TK_STRCONCAT TK_LPAREN E TK_COMA E TK_RPAREN
 								}
 								;
 /*
-LITS							: LITERAL
+LITS						: LITERAL
 								{
 									$$ = $1;
 								}
@@ -1047,7 +1103,7 @@ LITS							: LITERAL
 								}
 								;
 */
-ITERATOR						: ASSIGNMENT
+ITERATOR				: ASSIGNMENT
 								{
 									$$ = $1;
 								}
@@ -1056,6 +1112,25 @@ ITERATOR						: ASSIGNMENT
 									$$ = $1;
 								}
 								;
+DIMITEM					: TK_NUM_INT
+								{
+									$$.label = $1.label;
+									$$.type = "literal";
+									$$.value = stoi($1.label);
+								}
+								| TK_ID
+								{
+									attributes idAttr = IDVerifier($1.label);
+									if(idAttr.type != "int") {
+										errorReport("Erro Semantico: Dimensão de vetor/matriz deve ser do tipo inteiro!");
+										generalError = true;
+									}
+									if(holds_alternative<monostate>(idAttr.value)) {
+										errorReport("Erro Semântico: A variável utilizada para o vetor/matriz precisa ter um valor!");
+										generalError = true;
+									}
+									$$ = idAttr;
+								}
 
 %%
 
@@ -1066,11 +1141,21 @@ int yyparse();
 
 
 // FUNÇÕES GERAIS
-string genAlias(string type)
+string genAlias(string type, tempCategory category, vector<attributes> dimensions)
 {
 	var_temp_qnt++;
 	string name = "_t" + to_string(var_temp_qnt);
-	alias_types[name] = type;
+	aliasMetadata meta;
+	if(type=="bool") {
+		meta.type = "int";
+	} else if(type=="string") {
+		meta.type = "char";
+	} else {
+		meta.type = type;
+	}
+	meta.category = category;
+	meta.dimensions = dimensions;
+	alias_vars[name] = meta;
 	return name;
 }
 int genLabel()
@@ -1124,45 +1209,60 @@ void commonVarDeclaration(string name, string type)
 		generalError = true;
 		return;
 	} else {
-		string aliasType;
-		if(type == "bool") {
-			aliasType = "int";
-		} else if(type == "string") {
-			aliasType = "char*";
-		} else {
-			aliasType = type;
-		}
-		string t = genAlias(aliasType);
+		string t = genAlias(type);
 		vector<attributes> dims = {};
 		current_scope->table[name] = {name, t, type, monostate(), dims};
 	}
 }
 void complexVarDeclaration(string name, string type, attributes rows, optional<attributes> columns)
 {
-	/*
 	if(current_scope->table.count(name)) {
 		yyerror("Erro Sintático: Variável '" + name + "' já declarada!");
 		generalError = true;
 		return;
 	} else {
-		string aliasType;
-		if(type == "bool") {
-			aliasType = "int";
-		} else if(type == "string") {
-			aliasType = "char*";
-		} else {
-			aliasType = type;
-		}
-		string t = genAlias(aliasType);
+		string t;
 		vector<attributes> dims;
-		dims.push_back(rows);
-		if(columns.has_value()) {
-			dims.push_back(columns.value());
+		if(rows.type == "literal") {
+			dims.push_back(rows);
+			if(columns.has_value()) {
+				dims.push_back(columns.value());
+				if(columns.value().type == "literal") {
+					t = genAlias(type, STATICMATRIX, dims);
+				} else {
+					t = genAlias(type, DYNAMICMATRIX, dims);
+				}
+			} else {
+				t = genAlias(type, STATICVECTOR, dims);
+			}
+		} else {
+			dims.push_back(rows);
+			if(columns.has_value()) {
+				dims.push_back(columns.value());
+				t = genAlias(type, DYNAMICMATRIX, dims);
+			} else {
+				t = genAlias(type, DYNAMICVECTOR, dims);
+			}
 		}
 		current_scope->table[name] = {name, t, type, monostate(), dims};
 	}
-*/
-	yyerror("Criação de variáveis complexas inicialmente feito!");
+}
+string dynMatrixVectorCodeGenerator(string name) {
+	string t;
+	symbol*s = current_scope->lookup(name);
+	auto cat = alias_vars[s->alias].category;
+	if((cat == STATICVECTOR) || (cat == STATICMATRIX)) {
+		t = "";
+		return t;
+	} else {
+    if (cat == DYNAMICVECTOR) {
+      t = "\t" + s->alias + " = (" + s->type + "*)malloc(" + s->dimensions[0].label + " * sizeof(" + s->type + "));\n";
+    }
+    else if (cat == DYNAMICMATRIX) {
+      t = "\t" + s->alias + " = (" + s->type + "*)malloc(" + s->dimensions[0].label + " * " + s->dimensions[1].label + " * sizeof(" + s->type + "));\n";
+    }
+	}
+	return t;
 }
 
 
@@ -1208,23 +1308,18 @@ attributes commonLitCodeGenerator(string type, string value)
 	string aliasType;
 	bool isString = false;
 	if(type == "bool") {
-		aliasType = "int";
 		r.value = (value=="true" || value=="1");
 	} else if(type == "string") {
-		aliasType = "char*";
 		r.value = value;
 		isString = true;
 	} else if(type == "int") {
-		aliasType = "int";
 		r.value = stoi(value);
 	} else if(type == "float") {
-		aliasType = "float";
 		r.value = stof(value);
 	} else if(type == "char") {
-		aliasType = "char";
 		r.value = value[0];
 	}
-	r.label = genAlias(aliasType);
+	r.label = genAlias(type);
 	r.type = type;
 	r.dimensions = {};
 	if(isString) {
@@ -1367,11 +1462,11 @@ attributes unNegCodeGenerator(attributes one)
 	if(one.type != "int" && one.type != "float") {
 		return errorReport("Erro Semântico: Tipo incompatível para operador unário");
 	}
-	string cType = (one.type == "float") ? "float" : "int";
-	r.label    = genAlias(cType);
-	r.type     = one.type;
-	r.dimensions     = {};
-	r.traducao = one.traducao +
+	r.label = genAlias(one.type);
+	r.type = one.type;
+	r.dimensions = {};
+	r.traducao =
+		one.traducao +
 		"\t" + r.label + " = -" + one.label + ";\n"
 	;
   return r;
@@ -1382,10 +1477,17 @@ attributes unPrefixCodeGenerator(string op, attributes right)
 	if(right.type != "int" && right.type != "float") {
 		return errorReport("Erro Semântico: " + op + " aplicável apenas a int e float!");
 	}
-	string cType  = (right.type == "float") ? "float" : "int";
-	string oneAlias = genAlias(cType);
-	string oneCode  = "\t" + oneAlias + " = 1;\n";
-	attributes one; one.label = oneAlias; one.type = right.type; one.traducao = "";
+	string oneAlias = genAlias(right.type);
+	string oneCode;
+	if(right.type=="float") {
+		oneCode  = "\t" + oneAlias + " = 1.0;\n";
+	} else {
+		oneCode  = "\t" + oneAlias + " = 1;\n";
+	}
+	attributes one;
+	one.label = oneAlias;
+	one.type = right.type;
+	one.traducao = "";
 	string basicOp  = (op == "++") ? "+" : "-";
 	attributes result = opCodeGeneratorOrchestrator(basicOp, right, one);
 	attributes r;
@@ -1406,17 +1508,19 @@ attributes unPostfixCodeGenerator(string op, attributes left)
 	if(left.type != "int" && left.type != "float") {
 			return errorReport("Erro Semântico: " + op + " aplicável apenas a int e float!");
 	}
-	string cType;
-	if (left.type == "float") {
-		cType = "float";
-	} else {
-		cType = "int";
-	}
-	string oldAlias = genAlias(cType);
+	string oldAlias = genAlias(left.type);
 	string saveCode = "\t" + oldAlias + " = " + left.label + ";\n";
-	string oneAlias = genAlias(cType);
-	string oneCode  = "\t" + oneAlias + " = 1;\n";
-	attributes one; one.label = oneAlias; one.type = left.type; one.traducao = "";
+	string oneAlias = genAlias(left.type);
+	string oneCode;
+	if(left.type=="float") {
+		oneCode  = "\t" + oneAlias + " = 1.0;\n";
+	} else {
+		oneCode  = "\t" + oneAlias + " = 1;\n";
+	}
+	attributes one;
+	one.label = oneAlias;
+	one.type = left.type;
+	one.traducao = "";
 	string basicOp;
 	if (op == "++") {
 		basicOp = "+";
@@ -1425,9 +1529,9 @@ attributes unPostfixCodeGenerator(string op, attributes left)
 	}
 	attributes result = opCodeGeneratorOrchestrator(basicOp, left, one);
 	attributes r;
-	r.type     = left.type;
-	r.dimensions     = {};
-	r.label    = oldAlias;
+	r.type = left.type;
+	r.dimensions = {};
+	r.label = oldAlias;
 	r.traducao =
 		left.traducao +
 		saveCode +
@@ -1455,7 +1559,7 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right)
 			generalError = true;
 			return r;
 		}
-		r.label = genAlias("int");
+		r.label = genAlias("bool");
 		r.type = "bool";
 		r.traducao = 
 			left.traducao + 
@@ -1464,7 +1568,7 @@ attributes logicRelCodeGenerator(string op, attributes left, attributes right)
 		;
 		return r;
 	}
-	r.label = genAlias("int"); 
+	r.label = genAlias("bool"); 
 	r.type = "bool"; 
 	string leftLabel = "";
 	string rightLabel = "";
@@ -1522,15 +1626,7 @@ attributes castCodeGenerator(string tType, attributes right)
 		generalError = true;
 		return r;
 	}
-	string aliasType;
-	if(tType == "bool") {
-		aliasType = "int";
-	} else if(tType == "string") {
-		aliasType = "char*";
-	} else {
-		aliasType = tType;
-	}
-	r.label = genAlias(aliasType);
+	r.label = genAlias(tType);
 	r.type = tType;
 	r.value = tType;
 	r.traducao = 
@@ -1622,7 +1718,7 @@ attributes stringConcatenation(attributes left, attributes right) {
 		generalError = true;
 		return r;
 	}
-	r.label = genAlias("char*");
+	r.label = genAlias("string");
 	r.type = "string";
 	string leftVal = "";
 	string rightVal = "";
@@ -1651,7 +1747,7 @@ attributes stringRepetition(attributes left, attributes right) {
 		generalError = true;
 		return r;
 	}
-	r.label = genAlias("char*");
+	r.label = genAlias("string");
 	r.type = "string";
 	bool isLiteral = false;
 	string leftVal = "";
