@@ -1306,7 +1306,12 @@ string dynMatrixVectorCodeGenerator(string name) {
       t = "\t" + s->alias + " = (" + s->type + "*)malloc(" + s->dimensions[0].label + " * sizeof(" + s->type + "));\n";
     }
     else if (cat == DYNAMICMATRIX) {
-      t = "\t" + s->alias + " = (" + s->type + "*)malloc(" + s->dimensions[0].label + " * " + s->dimensions[1].label + " * sizeof(" + s->type + "));\n";
+			string part0 = genAlias("int");
+			string part1 = "\t" + part0 + " = " + s->dimensions[0].label + " + " + s->dimensions[1].label + ";\n";
+      t =
+				part1 +
+				"\t" + s->alias + " = (" + s->type + "*)malloc(" + part0 + " * sizeof(" + s->type + "));\n"
+			;
     }
 	}
 	return t;
@@ -1410,11 +1415,17 @@ attributes arrayCodeGenerator(string name, attributes rows, optional<attributes>
 		if(rows.type!="int" || columns.value().type!="int") {
 			return errorReport("Erro Semântico: Os índices da matriz devem ser to tipo int!");
 		}
+		string part0 = genAlias("int");
+		string part1 = "\t" + part0 + " = " + rows.label + " * " + s->dimensions[1].label + ";\n";
+		string part2 = genAlias("int");
+		string part3 = "\t" + part2 + " = " + part0 + " + " + columns.value().label + ";\n";
 		string index = "(" + rows.label + " * " + s->dimensions[1].label + ") + " + columns.value().label;
-		r.label = s->alias + "[" + index + "]";
+		r.label = s->alias + "[" + part2 + "]";
 		r.traducao =
 			rows.traducao +
-			columns.value().traducao
+			columns.value().traducao +
+			part1 +
+			part3
 		;
 	}
 	return r;
@@ -1975,7 +1986,12 @@ attributes arrayAssignmentCodeGenerator(string id, attributes literal) {
 		}
 		r.traducao = literal.traducao;
 		for(int i=0; i<literal.elements.size(); i++) {
-			r.traducao += "\t" + s->alias + "[" + to_string(i) + "] = " + literal.elements[i].label + ";\n";
+			string part0 = genAlias("int");
+			string part1 = "\t" + part0 + " = " + to_string(i) + ";\n";
+			r.traducao +=
+				part1 +
+				"\t" + s->alias + "[" + part0 + "] = " + literal.elements[i].label + ";\n"
+			;
 		}
 	} else if(s->dimensions.size() == 2) {
 		if(get<int>(s->dimensions[0].value) != literal.elements.size()) {
@@ -1991,8 +2007,18 @@ attributes arrayAssignmentCodeGenerator(string id, attributes literal) {
 		r.traducao = literal.traducao;
 		for(int i=0; i<literal.elements.size(); i++) {
 			for(int j=0; j<literal.elements[i].elements.size(); j++) {
-				string index = "(" + to_string(i) + " * " + s->dimensions[1].label + ") + " + to_string(j);
-				r.traducao += "\t" + s->alias + "[" + index + "] = " + literal.elements[i].elements[j].label + ";\n";
+				string part0 = genAlias("int");
+				string part1 = "\t" + part0 + " = " + to_string(i) + ";\n";
+				string part2 = genAlias("int");
+				string part3 = "\t" + part2 + " = " + part0 + " * " + s->dimensions[1].label + ";\n";
+				string part4 = genAlias("int");
+				string part5 = "\t" + part4 + " = " + to_string(j) + ";\n";
+				string part6 = genAlias("int");
+				string index = "\t" + part6 + " = " + part2 + " + " + part4 + ";\n";
+				r.traducao +=
+					part1 + part3 + part5 + index +
+					"\t" + s->alias + "[" + part6 + "] = " + literal.elements[i].elements[j].label + ";\n"
+				;
 			}
 		}
 	}
