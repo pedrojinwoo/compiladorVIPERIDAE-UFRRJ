@@ -1,20 +1,18 @@
 int x;
-int y;
+x = 10;
 
-duplicar(int x): int {
-  y = x*2;
-  return y;
+func double(int x) : int {
+  return (x * 2);
+}
+func triple(int x) : int {
+  return (x * 3);
 }
 
-x = 10;
-y = 5;
-
 print(x);
-print(y);
-
-int resultado;
-resultado = duplicar(x);
-
+x = double(x);
 print(x);
-print(y);
-print(resultado);
+x = triple(x);
+print(x);
+
+string s;
+scan(s);

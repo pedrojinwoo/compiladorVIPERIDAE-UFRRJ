@@ -164,7 +164,7 @@ string popScope();
 %token TK_IF TK_ELSE TK_ELIF TK_WHILE TK_DO TK_FOR TK_SWITCH TK_CASE TK_DEFAULT
 %token TK_BREAK TK_ALL TK_CONTINUE
 %token TK_STRCONCAT TK_STRREP TK_STRLEN
-%token TK_RETURN
+%token TK_FUNC TK_RETURN
 %nonassoc CAST_PREC
 
 %start S
@@ -192,9 +192,37 @@ S 							: CMDS
 											"#include <string.h>\n"
 										;
 
+										codigo_gerado += "\n\n// TEMPORARIOS GLOBAIS";
+										if(stringScan) {
+											codigo_gerado += "\nchar _stringBuffer[10];";
+										}
+										for(int i=1; i<=var_temp_qnt; i++) {
+											string t = "_t" + to_string(i);
+											aliasMetadata meta = alias_vars[t];
+											switch(meta.category) {
+												case COMMON:
+													codigo_gerado += meta.type + " " + t + ";\n";
+													break;
+												case STATICVECTOR:
+													codigo_gerado += meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value)) + "];\n";
+													break;
+												case STATICMATRIX:
+													codigo_gerado += 
+														meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value) * get<int>(meta.dimensions[1].value)) + "];\n"
+													;
+													break;
+												case DYNAMICVECTOR:
+													codigo_gerado += meta.type + "* " + t + ";\n";
+													break;
+												case DYNAMICMATRIX:
+													codigo_gerado += meta.type + "* " + t + ";\n";
+													break;
+											}
+										}
+
+										codigo_gerado += "\n\n// PROTOTIPOS DE FUNCOES";
 										if(stringScan) {
 											codigo_gerado +=
-												"\nchar _stringBuffer[10];"
 												"\nint _stringLen(char* _str);"
 												"\nvoid _keyboardCleanup();"
 											;
@@ -204,66 +232,10 @@ S 							: CMDS
 												"\nint _stringLen(char* _str);"
 											;
 										}
-									
-									codigo_gerado += "\n// VARIÁVEIS GLOBAIS E TEMPORÁRIOS\n";
-										for(int i=1; i<=var_temp_qnt; i++) {
-											string t = "_t" + to_string(i);
-											aliasMetadata meta = alias_vars[t];
-											switch(meta.category) {
-												case COMMON:
-													codigo_gerado += "\t" + meta.type + " " + t + ";\n";
-													break;
-												case STATICVECTOR:
-													codigo_gerado += "\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value)) + "];\n";
-													break;
-												case STATICMATRIX:
-													codigo_gerado += 
-														"\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value) * get<int>(meta.dimensions[1].value)) + "];\n"
-													;
-													break;
-												case DYNAMICVECTOR:
-													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
-													break;
-												case DYNAMICMATRIX:
-													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
-													break;
-											}
-										}
+										codigo_gerado += "\n\n" + prototype_codes;
+										
 
-									/*
-										codigo_gerado += "\n\nint main() {\n";
-
-										for(int i=1; i<=var_temp_qnt; i++) {
-											string t = "_t" + to_string(i);
-											aliasMetadata meta = alias_vars[t];
-											switch(meta.category) {
-												case COMMON:
-													codigo_gerado += "\t" + meta.type + " " + t + ";\n";
-													break;
-												case STATICVECTOR:
-													codigo_gerado += "\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value)) + "];\n";
-													break;
-												case STATICMATRIX:
-													codigo_gerado += 
-														"\t" + meta.type + " " + t + "[" + to_string(get<int>(meta.dimensions[0].value) * get<int>(meta.dimensions[1].value)) + "];\n"
-													;
-													break;
-												case DYNAMICVECTOR:
-													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
-													break;
-												case DYNAMICMATRIX:
-													codigo_gerado += "\t" + meta.type + "* " + t + ";\n";
-													break;
-											}
-										}
-									*/
-
-										codigo_gerado += 
-											"\n// === PROTÓTIPOS DAS FUNÇÕES ===\n" +
-											prototype_codes + "\n"
-										;
-
-										codigo_gerado += "\n\nint main() {\n";
+										codigo_gerado += "\n\nint main() {";
 
 										codigo_gerado += "\n";
 
@@ -276,87 +248,85 @@ S 							: CMDS
 											"}\n"
 										;
 
-										codigo_gerado +=
-											"\n// === DEFINIÇÕES DAS FUNÇÕES ===\n" +
-											functions_codes + "\n"
-										;
+										codigo_gerado += "\n\n// FUNCOES\n";
+										codigo_gerado += functions_codes;
 
 										if(stringScan) {
 											codigo_gerado += 
-												"\nint _stringLen(char* _str) {\n"
-													"\tint _len;\n"
-													"\tchar _tChar;\n"
-													"\tchar _tStrClose;\n"
-													"\tint _temp1;\n"
-													"\t int _tCond;\n"
-													"\n"
-													"\t_len = 0;\n"
-													"\t_tChar = _str[_len];\n"
-													"\t_tStrClose = '\\0';\n"
-													"\t_temp1 = _tChar != _tStrClose;\n"
-													"\t_tCond = _temp1;\n"
-													"\twhile(_tCond) {\n"
-													"\t\t_len++;\n"
-													"\t\t_tChar = _str[_len];\n"
-													"\t\t_temp1 = _tChar != _tStrClose;\n"
-													"\t\t_tCond = _temp1;\n"
-													"\t}\n"
-													"\t_len++;\n"
-													"\treturn _len;\n"
-												"}"
+												"int _stringLen(char* _str) {\n"
+												"\tint _len;\n"
+												"\tchar _tChar;\n"
+												"\tchar _tStrClose;\n"
+												"\tint _temp1;\n"
+												"\t int _tCond;\n"
+												"\n"
+												"\t_len = 0;\n"
+												"\t_tChar = _str[_len];\n"
+												"\t_tStrClose = '\\0';\n"
+												"\t_temp1 = _tChar != _tStrClose;\n"
+												"\t_tCond = _temp1;\n"
+												"\twhile(_tCond) {\n"
+												"\t\t_len++;\n"
+												"\t\t_tChar = _str[_len];\n"
+												"\t\t_temp1 = _tChar != _tStrClose;\n"
+												"\t\t_tCond = _temp1;\n"
+												"\t}\n"
+												"\t_len++;\n"
+												"\treturn _len;\n"
+												"}\n"
 
-												"\nvoid _keyboardCleanup() {\n"
-													"\tint _c1;\n"
-													"\tint _c2;\n"
-													"\tchar _c3;\n"
-													"\tint _c4;\n"
-													"\tint _c5;\n"
-													"\tint _c6;\n"
-													"\tint _c7;\n"
-													"\tint _c8;\n"
-													"\tint _c9;\n"
-													"\tint _c10;\n"
-													"\n"
-													"\t_c2 = 0;\n"
-													"\t_c1 = _c2;\n"
-													"\tWHILESTART_1:\n"
-													"\t_c3 = \'\\n\';\n"
-													"\t_c5 = (int) _c3;\n"
-													"\t_c4 = _c1 != _c5;\n"
-													"\t_c6 = -1;\n"
-													"\t_c7 = _c1 != _c6;\n"
-													"\t_c8 = _c4 && _c7;\n"
-													"\t_c9 = !_c8;\n"
-													"\tif(_c9) goto WHILEEND_1;\n"
-													"\t_c10 = getchar();\n"
-													"\t_c1 = _c10;\n"
-													"\tgoto WHILESTART_1;\n"
-													"\tWHILEEND_1:\n"
-												"}"
+												"void _keyboardCleanup() {\n"
+												"\tint _c1;\n"
+												"\tint _c2;\n"
+												"\tchar _c3;\n"
+												"\tint _c4;\n"
+												"\tint _c5;\n"
+												"\tint _c6;\n"
+												"\tint _c7;\n"
+												"\tint _c8;\n"
+												"\tint _c9;\n"
+												"\tint _c10;\n"
+												"\n"
+												"\t_c2 = 0;\n"
+												"\t_c1 = _c2;\n"
+												"\tWHILESTART_1:\n"
+												"\t_c3 = \'\\n\';\n"
+												"\t_c5 = (int) _c3;\n"
+												"\t_c4 = _c1 != _c5;\n"
+												"\t_c6 = -1;\n"
+												"\t_c7 = _c1 != _c6;\n"
+												"\t_c8 = _c4 && _c7;\n"
+												"\t_c9 = !_c8;\n"
+												"\tif(_c9) goto WHILEEND_1;\n"
+												"\t_c10 = getchar();\n"
+												"\t_c1 = _c10;\n"
+												"\tgoto WHILESTART_1;\n"
+												"\tWHILEEND_1:\n"
+												"}\n"
 											;
 										}
 										if(stringLen) {
 											codigo_gerado += 
-												"\nint _stringLen(char* _str) {\n"
-													"\tint _len;\n"
-													"\tchar _tChar;\n"
-													"\tchar _tStrClose;\n"
-													"\tint _temp1;\n"
-													"\t int _tCond;\n"
-													"\n"
-													"\t_len = 0;\n"
-													"\t_tChar = _str[_len];\n"
-													"\t_tStrClose = '\\0';\n"
-													"\t_temp1 = _tChar != _tStrClose;\n"
-													"\t_tCond = _temp1;\n"
-													"\twhile(_tCond) {\n"
-													"\t\t_len++;\n"
-													"\t\t_tChar = _str[_len];\n"
-													"\t\t_temp1 = _tChar != _tStrClose;\n"
-													"\t\t_tCond = _temp1;\n"
-													"\t}\n"
-													"\t_len++;\n"
-													"\treturn _len;\n"
+												"int _stringLen(char* _str) {\n"
+												"\tint _len;\n"
+												"\tchar _tChar;\n"
+												"\tchar _tStrClose;\n"
+												"\tint _temp1;\n"
+												"\t int _tCond;\n"
+												"\n"
+												"\t_len = 0;\n"
+												"\t_tChar = _str[_len];\n"
+												"\t_tStrClose = '\\0';\n"
+												"\t_temp1 = _tChar != _tStrClose;\n"
+												"\t_tCond = _temp1;\n"
+												"\twhile(_tCond) {\n"
+												"\t\t_len++;\n"
+												"\t\t_tChar = _str[_len];\n"
+												"\t\t_temp1 = _tChar != _tStrClose;\n"
+												"\t\t_tCond = _temp1;\n"
+												"\t}\n"
+												"\t_len++;\n"
+												"\treturn _len;\n"
 												"}"
 											;
 										}
@@ -421,19 +391,19 @@ CMD							: DECLARATION
 								}
 								;
 
-FUNC						: TK_ID TK_LPAREN { pushScope(); globalParamTypes.clear(); } PARAMS TK_RPAREN TK_COLON TYPE { funcReturnTypeAuth=$7.label; } TK_LBRACE CMDS TK_RBRACE
+FUNC						: TK_FUNC TK_ID TK_LPAREN { pushScope(); globalParamTypes.clear(); } PARAMS TK_RPAREN TK_COLON TYPE { funcReturnTypeAuth=$8.label; } TK_LBRACE CMDS TK_RBRACE
 								{
 									funcSigs func;
-									func.name = $1.label;
-									func.returnType = $7.label;
+									func.name = "_" + $2.label;
+									func.returnType = $8.label;
 									func.paramTypes = globalParamTypes;
-									function_table[$1.label] = func;
+									function_table[$2.label] = func;
 									string freeCode = popScope();
-									prototype_codes += $7.label +	" " + $1.label + "(" + $4.label + ");\n";
+									prototype_codes += $8.label +	" _" + $2.label + "(" + $5.label + ");\n";
 									functions_codes +=
-										$7.label +	" " + $1.label + "(" + $4.label + ") {\n" +
-										$10.traducao + freeCode +
-										"}\n\n"
+										$8.label +	" _" + $2.label + "(" + $5.label + ") {\n" +
+										$11.traducao + freeCode +
+										"}\n"
 									;
 									funcReturnTypeAuth = "";
 									$$.traducao = "";
@@ -1200,7 +1170,7 @@ BASE						:	LITERAL
 										$$.type = func.returnType;
 										$$.traducao = 
 											$3.traducao +
-											"\t" + temp + " = " + $1.label + "(" + $3.label + ");\n";
+											"\t" + temp + " = _" + $1.label + "(" + $3.label + ");\n";
 										;
 									}
 								}
@@ -1354,7 +1324,7 @@ string genAlias(string type, tempCategory category, vector<attributes> dimension
 	if(type=="bool") {
 		meta.type = "int";
 	} else if(type=="string") {
-		meta.type = "char";
+		meta.type = "char*";
 	} else {
 		meta.type = type;
 	}
