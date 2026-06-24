@@ -1139,17 +1139,6 @@ STRINGACTIONS		: TK_STRCONCAT TK_LPAREN E TK_COMA E TK_RPAREN
 									$$ = stringOrchestrator("length", $3);
 								}
 								;
-/*
-LITS						: LITERAL
-								{
-									$$ = $1;
-								}
-								| COMPLEXLITERAL
-								{
-									$$ = $1;
-								}
-								;
-*/
 ITERATOR				: ASSIGNMENT
 								{
 									$$ = $1;
@@ -1986,6 +1975,10 @@ attributes arrayAssignmentCodeGenerator(string id, attributes literal) {
 		}
 		r.traducao = literal.traducao;
 		for(int i=0; i<literal.elements.size(); i++) {
+			if(literal.elements[i].type != s->type) {
+				errorReport("Erro Semântico: Apenas valores com o mesmo tipo que o do array podem ser inseridos na estrutura!");
+				generalError = true;
+			}
 			string part0 = genAlias("int");
 			string part1 = "\t" + part0 + " = " + to_string(i) + ";\n";
 			r.traducao +=
@@ -2007,6 +2000,10 @@ attributes arrayAssignmentCodeGenerator(string id, attributes literal) {
 		r.traducao = literal.traducao;
 		for(int i=0; i<literal.elements.size(); i++) {
 			for(int j=0; j<literal.elements[i].elements.size(); j++) {
+				if(literal.elements[i].elements[j].type != s->type) {
+					errorReport("Erro Semântico: Apenas valores com o mesmo tipo que o do array podem ser inseridos na estrutura!");
+					generalError = true;
+				}
 				string part0 = genAlias("int");
 				string part1 = "\t" + part0 + " = " + to_string(i) + ";\n";
 				string part2 = genAlias("int");
